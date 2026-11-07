@@ -55,7 +55,32 @@ Not a quote; a guide to where the budget goes. Assume Sonnet is 1x per token, Op
 
 If you need to cut, cut effort on Stage 2 from high to medium before touching Stage 3.
 
-## 5. Kickoff checklist (do this for every session)
+## 5. Local lane: tasks that run on the laptop GPU instead of credits
+
+The laptop has an RTX 4060 (8 GB VRAM) and Ollama is installed. Claude Code sessions cannot swap their own reasoning for a local model, so the local lane is a separate assistant used for small, well-specified, mechanical jobs, with a Claude session reviewing the result. Credits are only spent on model tokens; the terrain pipeline, builds, tests and the game itself already run locally.
+
+**Model:** `qwen2.5-coder:7b` (4.7 GB download, installed 2026-11-07). Measured warm speed on the 4060: about 42 tokens per second with 91 percent of the model on the GPU at Ollama's default 32k context. Set the context to 8k or 16k (`OLLAMA_CONTEXT_LENGTH=16384` before starting Ollama, or `num_ctx` in the client) to fit it entirely on the GPU. Anything 14B or larger spills to CPU on 8 GB and becomes too slow to be worth it.
+
+**Tool:** Aider in a terminal in the repo (`pip install aider-chat`, then `aider --model ollama/qwen2.5-coder:7b <files>`), or the Continue extension in VS Code pointed at Ollama. Both can read and edit files directly.
+
+**Local-eligible tasks** (expect to check the output, these models are roughly Haiku-level and weaker on long context):
+
+| Task | Stage | Why it fits |
+|---|---|---|
+| Writing harness scenario files from a described input timeline | 3 | Small, pattern-based TypeScript |
+| CSV-to-PNG plot scripts (matplotlib) for stage reports | 3, 6 | Boilerplate Python |
+| Tidying raw playtest notes into `playtest-notes.md` and bug lines | 4 to 6 | Text reshaping |
+| Draft commit messages from a diff | all | Short, local context |
+| Boilerplate unit tests from an explicit list of cases | 3, 4 | Mechanical once the list exists |
+| Attribution text from `docs/ASSETS.md` | 5 | Text assembly |
+| Single-file lint or formatting fixes | 6 | Tiny scope |
+| Exit blurbs, menu copy, "WIPEOUT" one-liners | 4 | Low stakes, fun to iterate locally |
+
+**Never local:** the flight model, the terrain LOD, the data pipeline's projection work, the state machine, anything touching `src/types/`, and all gate reviews. A wrong answer there costs more credits to repair than it saved.
+
+**Realistic saving:** 5 to 10 percent of the build budget. The model and effort table above saves far more; the local lane is a bonus for the fiddly bits.
+
+## 6. Kickoff checklist (do this for every session)
 
 1. New session in this folder, fresh context.
 2. Set model and effort from the table above.

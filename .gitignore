@@ -3,3 +3,9 @@ dist
 .env
 tools/terrain/cache/
 *.local
+
+# Aider (local lane) working files
+.aider.tags.cache.d/
+.aider.chat.history.md
+.aider.input.history
+.aider.llm.history

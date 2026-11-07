@@ -1,0 +1,7 @@
+# Aider defaults for the local lane (docs/05-agent-settings.md section 5).
+# Launch from a fresh PowerShell:  aider <files>
+model: ollama/qwen2.5-coder:7b
+auto-commits: false
+dirty-commits: false
+attribute-author: false
+show-model-warnings: false
