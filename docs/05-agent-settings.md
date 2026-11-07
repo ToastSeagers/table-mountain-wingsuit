@@ -30,7 +30,7 @@ Goal: spend credits where judgement and iteration matter, save them where the wo
 ## 3. Credit strategy
 
 1. **One stage, one fresh session.** Briefs are written so an agent can start cold. Never fork the planning conversation into a build session; that drags thousands of tokens of planning into every call.
-2. **Plan mode for Stages 2 and 3 only.** Approving a plan costs one round trip and saves rework on the two stages where the design matters most. Everywhere else the brief is the plan.
+2. **A written plan for Stages 2 and 3 only, approved by the Orchestrator.** Approving a plan costs one round trip and saves rework on the two stages where the design matters most. Everywhere else the brief is the plan. Since 2026-11-08 the owner has delegated approvals to the Orchestrator session, so these sessions start in auto mode, write `docs/status/stage-N-plan.md`, stop, and continue when the Orchestrator messages approval (see `docs/03-handoff-protocol.md` section 5). Claude Code's plan mode is not used, because leaving it needs the owner's click.
 3. **Auto permission mode for build stages.** Every permission prompt is a round trip you pay for in time, and the agent often re-reads context afterward.
 4. **Say "stop and report" in every kickoff prompt.** It is in the briefs already. An agent that wanders into the next stage spends credits on work that will be redone.
 5. **Keep sessions short.** When a stage report is written, archive the session. Follow-up fixes after a gate review go to a new short session with the report as context, not back into the long one.

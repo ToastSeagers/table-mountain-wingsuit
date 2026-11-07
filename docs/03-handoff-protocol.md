@@ -64,7 +64,17 @@ Blockers also get a short paragraph under the "Open blockers" heading in `STATUS
 4. Fail: write the failing items into a short new session prompt ("Fix these three items from Gate N on branch stage-N-xxx, then update the report") using the same model as the stage. Do not reopen the long session.
 5. If the report changed a shared type or constant, read `STATUS.md` for any running stage that depends on it and message that session.
 
-## 5. Asking questions
+## 5. Plan approvals (delegated to the Orchestrator)
+
+The project owner has delegated plan approval to the Orchestrator session (decision of 2026-11-08). For stages that plan first (2 and 3 in the table, and any later stage whose brief says so):
+
+- The agent writes its plan to `docs/status/stage-N-plan.md`, commits it, and stops its turn without coding. The Orchestrator is woken automatically.
+- The Orchestrator reads the plan against the brief and specs, then replies by message: "Plan approved, proceed" or a short list of changes. The agent continues on that message.
+- The owner is still asked, by the Orchestrator, before: merging to `main`, any decision that materially raises credit use, licence or scope changes, and anything destructive.
+
+A session started in Claude Code's own plan mode needs the owner's click to leave it, so new sessions start in auto mode and use the file-and-message flow above instead.
+
+## 6. Asking questions
 
 Agents should not stop to ask about anything the briefs and specs answer. For true unknowns, the agent picks the most reasonable option, writes it under "Decisions made" and continues. It stops only for the blockers listed in `PLAN.md` section 5 rule 6.
 
