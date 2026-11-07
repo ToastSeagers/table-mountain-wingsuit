@@ -18,3 +18,4 @@ Format: `YYYY-MM-DD · Stage N · role · DONE | BLOCKED | NOTE · one sentence 
 
 2026-11-07 · Planning · Orchestrator · DONE · Plan, specs, briefs and data files written; build not started · see PLAN.md
 2026-11-07 · Stage 0 · Bootstrap engineer · DONE · Vite/TS/Three scaffold, frozen types, geo module + test, pixel-font HUD scene, all scripts green · see stage-0-report.md
+2026-11-07 · Stage 0 · Orchestrator · NOTE · Gate 0 PASS (test 8/8, lint, typecheck, build re-run by the Orchestrator). Shared type change: `ExitDefinition.unlock` gains `{ type: 'completed'; exitId }` to match docs/design/exits.md and data/exits.json. Stages 1 and 3 may start. · see docs/01-architecture.md section 5

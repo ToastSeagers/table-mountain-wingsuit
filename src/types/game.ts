@@ -7,7 +7,7 @@ export interface ExitDefinition {
   headingDeg: number             // initial facing
   difficulty: 1 | 2 | 3
   recommendedLandingZones: string[]
-  unlock: { type: 'always' } | { type: 'score'; exitId: string; min: number }
+  unlock: { type: 'always' } | { type: 'completed'; exitId: string } | { type: 'score'; exitId: string; min: number }
   intro: { cameraPath: Vec3[]; durationS: number }
   blurb: string
 }
