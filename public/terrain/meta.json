@@ -31,8 +31,8 @@
   },
   "source": {
     "dem": "City of Cape Town Ground Level Map 2 m contours (CCT GLM 2019, LiDAR 2019B, 0.3 m vertical accuracy), linearly interpolated to 5 m; Copernicus GLO-30 used only as the sea mask",
-    "imagery": "Sentinel-2 L2A S2C_34HBH_20260114_0_L2A (2026-01-14), 10 m true colour, graded",
-    "licence": "DEM: City of Cape Town Open Data Terms of Use (free, as-is). Sea mask: Copernicus DEM GLO-30, ESA/Airbus licence, attribution required. Imagery: Contains modified Copernicus Sentinel data 2026, free and open (Copernicus Sentinel Data Terms and Conditions), attribution required."
+    "imagery": "City of Cape Town aerial orthophoto mosaic January 2025 (5 cm source, exported at 1.25 m/px from the City image server), graded",
+    "licence": "DEM: City of Cape Town Open Data Terms of Use (free, as-is). Sea mask: Copernicus DEM GLO-30, ESA/Airbus licence, attribution required. Imagery: City of Cape Town Open Data Terms of Use, imagery property of the City, no restrictions for non-commercial purposes (this game is non-commercial), attribution given."
   },
   "checkpoints": [
     {

@@ -33,6 +33,8 @@ GREEN_MASK_WIDTH = 0.08  # how far G must exceed max(R, B) for the full effect
 SEA_BLUE = np.array([0.16, 0.38, 0.58], dtype=np.float32)  # Atlantic at golden hour
 SEA_MIX = 0.85  # L2A sea is almost black, so paint most of the way to SEA_BLUE
 SEA_BRIGHTEN = 6.0  # sea texture (swell, shallows) gain before mixing
+AERIAL_SEA_MIX = 0.25  # the City mosaic's sea is already blue-green; just the "touch of blue"
+AERIAL_SEA_BRIGHTEN = 1.0
 NDWI_WATER_THRESHOLD = 0.3
 DARK_REFLECTANCE = 0.012  # below this the L2A correction has bottomed out: black water or hard shadow
 WATER_DILATE_PX = 6  # dark pixels this close (60 m) to known water are water (surf, glint-corrected shallows)
@@ -111,10 +113,17 @@ def fill_shadows(display_rgb: np.ndarray, water: np.ndarray, raw_brightness: np.
     return out
 
 
-def grade_rgb(display_rgb: np.ndarray, water: np.ndarray | None = None) -> np.ndarray:
+def grade_rgb(
+    display_rgb: np.ndarray,
+    water: np.ndarray | None = None,
+    sea_mix: float = SEA_MIX,
+    sea_brighten: float = SEA_BRIGHTEN,
+) -> np.ndarray:
     """Apply the look to a display-referred float image (H, W, 3) in 0..1.
 
     Returns uint8 sRGB. ``water`` is an optional boolean mask of sea pixels.
+    ``sea_mix`` and ``sea_brighten`` default to the Sentinel-2 values (its sea
+    is black); the aerial mosaic already has a good sea and uses AERIAL_SEA_*.
     """
     img = display_rgb.astype(np.float32, copy=True)
 
@@ -133,10 +142,10 @@ def grade_rgb(display_rgb: np.ndarray, water: np.ndarray | None = None) -> np.nd
 
     # 4. Sea toward blue, keeping swell and foam texture.
     if water is not None:
-        sea = np.clip(img * SEA_BRIGHTEN, 0.0, 1.0)
+        sea = np.clip(img * sea_brighten, 0.0, 1.0)
         sea_luma = luminance(sea)[..., None]
         target = SEA_BLUE * (0.6 + 0.8 * sea_luma)
-        blended = sea + (target - sea) * SEA_MIX
+        blended = sea + (target - sea) * sea_mix
         img = np.where(water[..., None], blended, img)
 
     return (np.clip(img, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)

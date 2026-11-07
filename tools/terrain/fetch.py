@@ -13,10 +13,12 @@ Sources (see docs/ASSETS.md for licences):
   as the fallback surface where contours are missing.
 * Sentinel-2 L2A bands B02, B03, B04, B08 at 10 m from the AWS ``sentinel-cogs``
   bucket (Element84 Earth Search STAC), windowed to the AOI.
-* Optional (``--cct-aerial``): City of Cape Town aerial orthophoto mosaic via
-  the City's image server. Non-commercial use only; not the default.
+* City of Cape Town aerial orthophoto mosaic (January 2025) via the City's
+  image server, exported straight onto the texture grid. Its terms allow
+  non-commercial use, which this project is. ``--no-cct-aerial`` skips it
+  (then build with ``--imagery s2``).
 
-Run from the repo root: ``python tools/terrain/fetch.py [--cct-aerial]``
+Run from the repo root: ``python tools/terrain/fetch.py [--no-cct-aerial]``
 """
 
 from __future__ import annotations
@@ -284,14 +286,14 @@ def fetch_cct_aerial(out_dir: Path) -> Path:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--cct-aerial", action="store_true", help="also export the City aerial mosaic (non-commercial)")
+    ap.add_argument("--no-cct-aerial", action="store_true", help="skip the City aerial mosaic export (then build --imagery s2)")
     ap.add_argument("--scene", default=S2_SCENE, help="Sentinel-2 L2A STAC item id")
     args = ap.parse_args()
 
     fetch_glo30(geo.CACHE_DIR / "glo30")
     fetch_contours(geo.CACHE_DIR / "contours")
     fetch_sentinel2(geo.CACHE_DIR / "s2", args.scene)
-    if args.cct_aerial:
+    if not args.no_cct_aerial:
         fetch_cct_aerial(geo.CACHE_DIR / "imagery")
     print("fetch: done")
 

@@ -6,12 +6,15 @@ Sea is forced to exactly 0 using the Copernicus GLO-30 water mask; negative
 land (dredged basins, quarries) is clamped to 0. Output: uint16 tiles with a
 1-sample overlap, ``heightScale`` 0.05.
 
-Textures: Sentinel-2 L2A bands are warped onto the world grid at 10 m, graded
-with ``grade.py``, then upsampled to 1024 px tiles (1.25 m/px) and a 2048 px
-overview. All WebP, sRGB, quality 80.
+Textures: by default the City of Cape Town aerial orthophoto mosaic, exported
+by ``fetch.py`` straight onto the 1.25 m/px texture grid and graded with
+``grade.py`` (this is a non-commercial project, which its terms allow). With
+``--imagery s2`` the Sentinel-2 L2A bands are warped onto the world grid at
+10 m, graded, then upsampled. Sentinel-2 is always fetched: it provides the
+water index for the sea mask and the grade. All WebP, sRGB, quality 80.
 
 Run from the repo root after ``fetch.py``:
-    python tools/terrain/build.py [--heights-only | --textures-only] [--imagery s2|cct-aerial]
+    python tools/terrain/build.py [--heights-only | --textures-only] [--imagery cct-aerial|s2]
 """
 
 from __future__ import annotations
@@ -28,7 +31,7 @@ from PIL import Image
 from rasterio.enums import Resampling
 from rasterio.warp import reproject
 from scipy.interpolate import LinearNDInterpolator
-from scipy.ndimage import distance_transform_edt, label
+from scipy.ndimage import distance_transform_edt, label, uniform_filter
 from scipy.spatial import QhullError
 
 import geo
@@ -293,11 +296,65 @@ def graded_full_res(imagery: str) -> np.ndarray:
     refl = np.clip((dn + offset) / 10000.0, 0.0, 1.0)
     water_small = grade.water_mask(refl[:3], refl[3])
     water = np.asarray(Image.fromarray(water_small.astype(np.uint8) * 255).resize((tg.width, tg.height), Image.Resampling.BILINEAR)) > 127
+    rgb = fill_aerial_open_sea(rgb, water_small.shape)
     out = np.empty(rgb.shape, dtype=np.uint8)
     rows = geo.TEXTURE_TILE_SIZE
     for r0 in range(0, tg.height, rows):
-        out[r0 : r0 + rows] = grade.grade_rgb(rgb[r0 : r0 + rows], water[r0 : r0 + rows])
+        out[r0 : r0 + rows] = grade.grade_rgb(
+            rgb[r0 : r0 + rows], water[r0 : r0 + rows], grade.AERIAL_SEA_MIX, grade.AERIAL_SEA_BRIGHTEN
+        )
     return out
+
+
+AERIAL_SEA_FADE_START_M = 150.0  # offshore of this, the mosaic's water fades into one sea colour
+AERIAL_SEA_FADE_END_M = 700.0  # ...and is fully that colour here, well inside the mosaic's coverage edge
+AERIAL_SEA_TEXTURE_GAIN = 0.35  # how much Sentinel-2 swell luminance modulates the filled sea
+AERIAL_BLANK_MIN = 0.85  # all three channels above this over water = no mosaic coverage (served white)
+AERIAL_BLANK_MIN_DIST_M = 40.0  # closer to the coast than this, white is surf, not blank
+AERIAL_BLANK_FEATHER_PX = 15  # box feather (about 19 m) on the blank edge
+
+
+def fill_aerial_open_sea(rgb: np.ndarray, small_shape: tuple[int, int]) -> np.ndarray:
+    """The City mosaic stops a few hundred metres offshore (white beyond).
+
+    Open water, by the built terrain's sea mask, fades with distance from the
+    coast into the mosaic's own median sea colour, textured with the graded
+    Sentinel-2 sea so it is not flat. The fade finishes before the coverage
+    edge, so that edge never shows.
+    """
+    tg = geo.texture_grid()
+    h = np.load(HEIGHTS_CACHE)
+    # Work at the 10 m grid: sea mask, coast distance, S2 texture; then upsample.
+    small_t = geo.WorldGrid(tg.min_x, tg.min_z, tg.cell_x_m * 8, tg.cell_z_m * 8, small_shape[1], small_shape[0])
+    sea_small = grade.terrain_sea_on_raster(h, small_t.geo_transform, small_shape)
+    dist_small = distance_transform_edt(sea_small) * small_t.cell_x_m
+    fade_small = np.clip((dist_small - AERIAL_SEA_FADE_START_M) / (AERIAL_SEA_FADE_END_M - AERIAL_SEA_FADE_START_M), 0.0, 1.0)
+    with rasterio.open(GRADED_PATH) as src:
+        s2 = np.moveaxis(src.read(), 0, -1).astype(np.float32) / 255.0
+    s2_luma = grade.luminance(s2)
+    sea_luma = s2_luma[sea_small]
+    tex_small = np.zeros(small_shape, dtype=np.float32)
+    if sea_luma.size:
+        tex_small = (s2_luma - float(np.median(sea_luma))) / max(float(np.std(sea_luma)), 1e-3)
+        tex_small = np.clip(tex_small, -2.0, 2.0) * 0.5
+    size = (tg.width, tg.height)
+    fade = np.asarray(Image.fromarray(fade_small.astype(np.float32), mode="F").resize(size, Image.Resampling.BILINEAR))
+    tex = np.asarray(Image.fromarray(tex_small.astype(np.float32), mode="F").resize(size, Image.Resampling.BILINEAR))
+    dist = np.asarray(Image.fromarray(dist_small.astype(np.float32), mode="F").resize(size, Image.Resampling.BILINEAR))
+    sea = np.asarray(Image.fromarray(sea_small.astype(np.float32), mode="F").resize(size, Image.Resampling.BILINEAR)) > 0.5
+    # Blank mosaic (white) over water, away from the surf line where real foam is white too.
+    blank = sea & (rgb.min(axis=-1) > AERIAL_BLANK_MIN) & (dist > AERIAL_BLANK_MIN_DIST_M)
+    blank_w = np.clip(uniform_filter(blank.astype(np.float32), size=AERIAL_BLANK_FEATHER_PX, mode="nearest") * 2.5, 0.0, 1.0)
+    weight = np.maximum(fade, blank_w)
+    del blank, dist
+    # Median colour of the mosaic's real (non-blank) water, sampled every 8th pixel.
+    sub = rgb[::8, ::8]
+    sea_px = sea_small[: sub.shape[0], : sub.shape[1]] & (sub.min(axis=-1) < 0.9)
+    colour = np.median(sub[sea_px], axis=0) if sea_px.any() else np.array([0.12, 0.35, 0.45], dtype=np.float32)
+    fill = colour[None, None, :] * (1.0 + AERIAL_SEA_TEXTURE_GAIN * tex)[..., None]
+    out = rgb + (np.clip(fill, 0.0, 1.0) - rgb) * weight[..., None]
+    print(f"textures: open sea filled with mosaic sea colour {np.round(colour * 255).astype(int).tolist()}")
+    return out.astype(np.float32)
 
 
 def write_texture_tiles(full: np.ndarray, out_dir: Path) -> int:
@@ -336,8 +393,14 @@ def write_meta(out_dir: Path, imagery: str) -> None:
             "free and open (Copernicus Sentinel Data Terms and Conditions), attribution required"
         )
     else:
-        imagery_desc = "City of Cape Town aerial orthophoto mosaic January 2025 (via City image server), graded"
-        imagery_licence = "City of Cape Town Open Data Terms of Use; non-commercial use only"
+        imagery_desc = (
+            "City of Cape Town aerial orthophoto mosaic January 2025 (5 cm source, exported at 1.25 m/px "
+            "from the City image server), graded"
+        )
+        imagery_licence = (
+            "City of Cape Town Open Data Terms of Use, imagery property of the City, "
+            "no restrictions for non-commercial purposes (this game is non-commercial), attribution given"
+        )
     checkpoints = []
     for p in geo.load_checkpoints():
         x, _, z = geo.lat_lon_to_world(p["lat"], p["lon"])
@@ -388,7 +451,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--heights-only", action="store_true")
     ap.add_argument("--textures-only", action="store_true")
-    ap.add_argument("--imagery", choices=["s2", "cct-aerial"], default="s2")
+    ap.add_argument(
+        "--imagery",
+        choices=["cct-aerial", "s2"],
+        default="cct-aerial",
+        help="cct-aerial: City 5 cm orthophoto (default, non-commercial project); s2: Sentinel-2 10 m, fully open",
+    )
     ap.add_argument("--regrade", action="store_true", help="re-run grade.py on the cached raw before tiling")
     ap.add_argument("--reinterpolate", action="store_true", help="redo the contour interpolation instead of reusing the cache")
     args = ap.parse_args()
@@ -415,6 +483,8 @@ def main() -> None:
     if not args.heights_only:
         if args.imagery == "s2" and (args.regrade or not GRADED_PATH.exists()):
             grade.grade_s2_raw()
+        if args.imagery == "cct-aerial" and not (cache / "imagery" / "cct_aerial_2025jan_rgb.tif").exists():
+            raise SystemExit("City aerial mosaic not in cache; run fetch.py (it is fetched by default)")
         full = graded_full_res(args.imagery)
         write_texture_tiles(full, out_dir)
 

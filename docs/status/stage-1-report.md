@@ -3,12 +3,13 @@
 **Agent:** Terrain Data Engineer · **Model/effort:** Fable 5.1 / high · **Branch:** claude/stage-1-terrain-data-fde883 (worktree created by the Orchestrator) · **Date:** 2026-11-08
 
 ## What was built
-- `public/terrain/`: 20 height tiles (`h/{col}_{row}.bin`, uint16 LE, 512 x 512, 1-sample overlap, `heightScale` 0.05), 80 texture tiles (`t/{col}_{row}.webp`, 1024 px, sRGB, quality 80), `overview.webp` (2048 px) and `meta.json` in the format of `docs/01-architecture.md` section 4. Total 13.6 MB (heights 10.5 MB, textures 3.1 MB). Open `meta.json` first.
+- `public/terrain/`: 20 height tiles (`h/{col}_{row}.bin`, uint16 LE, 512 x 512, 1-sample overlap, `heightScale` 0.05), 80 texture tiles (`t/{col}_{row}.webp`, 1024 px, sRGB, quality 80), `overview.webp` (2048 px) and `meta.json` in the format of `docs/01-architecture.md` section 4. Total 26.7 MB (heights 10.5 MB, textures 16.2 MB). Open `meta.json` first.
 - Elevation source is the **City of Cape Town Ground Level Map 2 m contours** (same 2019B LiDAR as the 5 m DEM, 0.3 m vertical accuracy), linearly interpolated to the 5 m grid. The City's 5 m DEM raster is only served as an 8-bit picture with a per-request stretch (no WCS, no ImageServer, float TIFF export errors), so it cannot be downloaded as data; see `tools/terrain/README.md` for the probes. Copernicus GLO-30 is used only to seed the sea mask. No 30 m heights ship.
-- Imagery is **Sentinel-2 L2A** scene `S2C_34HBH_20260114_0_L2A` (14 Jan 2026, 0.04 % cloud), bands B02/B03/B04/B08 at 10 m from the AWS open bucket, graded per look-and-feel section 4, then upsampled to the 1.25 m/px tiles.
+- Imagery is the **City of Cape Town January 2025 aerial orthophoto mosaic** (5 cm source), exported by the City image server straight onto the 1.25 m/px texture grid in nine requests, graded per look-and-feel section 4. Its terms allow non-commercial use; the project owner confirmed on 2026-11-08 that the game is personal and non-commercial. The mosaic stops a few hundred metres offshore, so open water (by the terrain's sea mask) fades into the mosaic's own median sea colour textured with Sentinel-2 swell.
+- **Sentinel-2 L2A** scene `S2C_34HBH_20260114_0_L2A` (14 Jan 2026, 0.04 % cloud, bands B02/B03/B04/B08 at 10 m from the AWS open bucket) is still fetched: its water index drives the sea mask and the grade, and `build.py --textures-only --imagery s2` re-tiles from it (fully open licence) if the aerial ever has to go.
 - `tools/terrain/`: `geo.py` (frame constants and grid), `fetch.py`, `build.py`, `grade.py`, `validate.py`, `refine_positions.py` (one-off snapping helper), `requirements.txt`, `README.md`. Python venv at `tools/terrain/.venv` (git-ignored), cache at `tools/terrain/cache/` (git-ignored, about 160 MB).
 - `tools/terrain/preview.png` (committed): hillshade beside the texture overview with checkpoints, exits and zones marked.
-- `docs/ASSETS.md`: rows for the contours, GLO-30, Sentinel-2, and the City aerial imagery (optional, not shipped), each with URL, date, licence and attribution text.
+- `docs/ASSETS.md`: rows for the contours, GLO-30, the City aerial imagery (shipped) and Sentinel-2 (water index, alternative texture), each with URL, date, licence and attribution text.
 
 ## How to run and verify
 From the repo root (Python 3.11+; built with 3.13):
@@ -16,12 +17,12 @@ From the repo root (Python 3.11+; built with 3.13):
 ```
 python -m venv tools/terrain/.venv
 tools/terrain/.venv/Scripts/python.exe -m pip install -r tools/terrain/requirements.txt
-tools/terrain/.venv/Scripts/python.exe tools/terrain/fetch.py      # ~4 min, 123 contour pages + 4 S2 bands + GLO-30
-tools/terrain/.venv/Scripts/python.exe tools/terrain/build.py      # ~5 min, Delaunay over 8.0 M contour points in 80 blocks
+tools/terrain/.venv/Scripts/python.exe tools/terrain/fetch.py      # ~10 min, 123 contour pages + 4 S2 bands + GLO-30 + 9 aerial exports
+tools/terrain/.venv/Scripts/python.exe tools/terrain/build.py      # ~6 min, Delaunay over 8.0 M contour points in 80 blocks, then textures
 tools/terrain/.venv/Scripts/python.exe tools/terrain/validate.py   # seconds; prints the table below, writes preview.png
 ```
 
-To only check the committed output: run `validate.py` alone (it needs the venv but no cache). Expected: six `ok` checkpoint lines, `ok tile seams`, `ok public/terrain total 13.6 MB`, `validate: PASS`, exit code 0.
+To only check the committed output: run `validate.py` alone (it needs the venv but no cache). Expected: six `ok` checkpoint lines, `ok tile seams`, `ok public/terrain total 26.7 MB`, `validate: PASS`, exit code 0.
 
 `npm test` (8/8), `npm run lint`, `npm run typecheck`, `npm run build` pass on the branch.
 
@@ -37,7 +38,7 @@ To only check the committed output: run `validate.py` alone (it needs the venv b
 | Camps Bay beach (sea) | 0 | 0.0 | 0.0 | 3 |
 | Sea Point promenade | 5 | 6.4 | +1.4 | 5 |
 
-- [x] `public/terrain/` under 60 MB: 13.6 MB (20 x 0.52 MB heights, 80 texture tiles averaging 33 KB, overview 0.47 MB).
+- [x] `public/terrain/` under 60 MB: 26.7 MB (20 x 0.52 MB heights, 80 texture tiles averaging 195 KB, overview 0.65 MB).
 - [x] No visible seams: `validate.py` checks every neighbouring height tile pair's shared edge for exact equality (max difference 0 steps), and `preview.png` is a single stitched image.
 - [x] `docs/ASSETS.md` has DEM and imagery rows with licence.
 - [x] `tools/terrain/README.md` lets a stranger rebuild (commands above, plus why contours, the grid definition and the imagery choice).
@@ -81,11 +82,13 @@ Note: the checkpoint lat/lons in `data/checkpoints.json` were moved (see below).
 - `src/` untouched.
 
 ## Tuning changes
-None in `src/flight/tuning.ts` or `src/game/scoring-tuning.ts` (not this stage). Imagery grade constants live at the top of `tools/terrain/grade.py` with comments; the values beyond the look-and-feel numbers are: white point 0.42 reflectance, gamma 1/1.9, shadow lift 0.045, warm +8/+2.5/-6 (of 255) at mid grey, green desaturation 15 % with a 0.08 greenness ramp, sea painted 85 % toward (41, 97, 148) because L2A sea is black, baked hard shadows (reflectance < 0.012) filled 85 % from the lit 80 m neighbourhood.
+None in `src/flight/tuning.ts` or `src/game/scoring-tuning.ts` (not this stage). Imagery grade constants live at the top of `tools/terrain/grade.py` with comments. Applied to the aerial mosaic: shadow lift 0.045, warm +8/+2.5/-6 (of 255) at mid grey, green desaturation 15 % with a 0.08 greenness ramp, sea 25 % toward (41, 97, 148). Open-sea fill (`build.py`): fade from 150 m to 700 m offshore into the mosaic's median sea colour (48, 102, 101), Sentinel-2 swell modulation 0.35, blank-coverage detection at min channel > 0.85 beyond 40 m from the coast with a 19 m feather. The Sentinel-2 path additionally uses white point 0.42 reflectance, gamma 1/1.9, sea painted 85 % toward the sea colour, and hard shadows (reflectance < 0.012) filled 85 % from the lit 80 m neighbourhood.
 
 ## Known issues and deferred items
-- **10 m imagery on 1.25 m tiles.** Up close the texture is soft; the Stage 2 slope and altitude detail blend is meant to cover this. If it is not enough, the City's January 2025 aerial mosaic (5 cm source) is wired in: `fetch.py --cct-aerial` then `build.py --imagery cct-aerial` (about 15 minutes, 9 export requests). Its terms say "no restrictions ... for non-commercial purposes", so the Orchestrator decides. Stage 2 or 5.
-- **Baked shadows.** The scene's 10:50 sun leaves soft shading on west faces even after the hard-shadow fill; golden-hour lighting from the west will disagree slightly. Acceptable at distance; the aerial mosaic has the same issue. Stage 5 can re-grade (`grade.py` then `build.py --textures-only`).
+- **Licence tie.** The shipped texture is the City aerial mosaic under non-commercial terms. If the project ever goes commercial, run `build.py --textures-only --imagery s2` (10 m Sentinel-2, fully open, softer) and update `docs/ASSETS.md`.
+- **Baked shadows.** The January 2025 mosaic was flown near midday, so cliff faces carry mild baked shading that the renderer's golden-hour light will partly contradict. Acceptable at distance. Stage 5 can re-grade (`grade.py` constants, then `build.py --textures-only`).
+- **Surf line.** Within 40 m of the coast white pixels are kept (real foam), so a few blank-coverage blobs survive right at the waterline, mostly at Camps Bay and Bantry Bay. Water rendering in Stage 2 will sit on top of them.
+- **Seasonal mismatch.** Aerial is January 2025, Sentinel-2 water index January 2026; the shoreline differs by a few metres in places. Invisible at 5 m.
 - **Flat spots on ridges and summits.** Linear interpolation between 2 m contours leaves facets up to 2 m high where a triangle's three vertices share a contour; summits read 1 to 4 m low (see the checkpoint table). No visible terracing at 5 m.
 - **Sea edge.** The coastline comes from the Sentinel-2 water index at 10 m plus a 25 m ramp, so beaches slope into the water; sea cells are exactly 0 (25.3 % of samples). Rock shelves below 2 m within 25 m of the water also ramp to 0.
 - **Grid bounds differ from the architecture's illustrative numbers.** `meta.json` says X -5925..6850, Z -5665..4555 (5 x 4 tiles of 511 cells), which contains the architecture AOI with a margin. Stage 2 must read `meta.json`, not the doc.
@@ -95,14 +98,14 @@ None in `src/flight/tuning.ts` or `src/game/scoring-tuning.ts` (not this stage).
 
 ## Decisions made
 - Contours over the DEM raster (raster not downloadable as data); GLO-30 only as a sea seed, never as heights.
-- Sentinel-2 over the City aerial for the shipped textures because its licence is unambiguous; aerial kept as an opt-in build flag with the licence check recorded.
-- Scene `S2C_34HBH_20260114_0_L2A` chosen from six cloud-free candidates (Nov 2024 to Mar 2026) for summer tones and lowest cloud; previews were compared side by side.
+- City aerial mosaic for the shipped textures, after the owner confirmed the project is non-commercial (its terms: "no restrictions on the digital file for non-commercial purposes"). Sentinel-2 kept as the always-fetched water index and as `--imagery s2`.
+- Sentinel-2 scene `S2C_34HBH_20260114_0_L2A` chosen from six cloud-free candidates (Nov 2024 to Mar 2026) for summer tones and lowest cloud; previews were compared side by side.
 - Earth Search COGs already have the BOA offset applied (`earthsearch:boa_offset_applied`); `build.py` reads that flag instead of assuming baseline 04.00 semantics.
 - Interpolation is block-wise Delaunay (256-sample blocks, 150 m margin) over contour vertices densified to 4 m, with vertices deduplicated to 0.1 m; the raw result is cached in `cache/heights_interp_5m.npy` so sea-rule or grade changes do not redo the 4-minute step.
 - Sea: flood fill from GLO-30 water more than 60 m beyond its coast, through cells under 6 m that the Sentinel-2 water index (NDWI > 0.3 and mean reflectance < 0.09) calls water, plus any such body over 0.5 ha (enclosed dock basins). Negative heights clamp to 0.
 - Checkpoint positions were moved rather than tolerances widened, since the data and GLO-30 agree and the authored points were off the features.
 - Exits snapped by a search for the biggest drop along the heading while staying within 40 m of the local top, with a distance penalty; The Table pinned by hand (see table). Zones snapped by lowest mean slope on land, with three placed by hand from City aerial crops where a bare-earth DEM cannot separate lawns from roofs.
-- Git: committed in three commits on the worktree branch; nothing pushed, no remote, identity untouched.
+- Git: committed in five commits on the worktree branch; nothing pushed, no remote, identity untouched.
 
 ## Suggested next step
-Orchestrator runs Gate 1 (`validate.py`, open `tools/terrain/preview.png`), merges, and starts Stage 2 with `meta.json` as the contract. Decide on the City aerial imagery before Stage 5 grades anything.
+Orchestrator runs Gate 1 (`validate.py`, open `tools/terrain/preview.png`), merges, and starts Stage 2 with `meta.json` as the contract.
