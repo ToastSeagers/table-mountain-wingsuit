@@ -86,5 +86,6 @@ The laptop has an RTX 4060 (8 GB VRAM) and Ollama is installed. Claude Code sess
 2. Set model and effort from the table above.
 3. Set permission mode (auto, or plan for Stages 2 and 3).
 4. Paste the kickoff prompt from the bottom of the agent's brief.
-5. When the report lands, read it in the Orchestrator session, run the gate, merge or send back.
-6. Archive the build session.
+5. **Check the model and mode in the session header right after it starts.** A session that fails to start (for example because a new worktree folder needs to be trusted) and is restarted falls back to the default model and mode, silently. This happened to Stages 1 and 3 on 2026-11-07: both ran on Fable 5.1 in auto mode instead of Opus 5.5, and Stage 3 skipped plan mode. If it happens, stop the session, fix the model and mode, and resend the kickoff prompt before it does real work.
+6. When the report lands, read it in the Orchestrator session, run the gate, merge or send back.
+7. Archive the build session.
