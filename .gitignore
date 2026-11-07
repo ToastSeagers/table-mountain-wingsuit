@@ -3,3 +3,5 @@ dist
 .env
 tools/terrain/cache/
 *.local
+tools/terrain/.venv/
+tools/terrain/__pycache__/
