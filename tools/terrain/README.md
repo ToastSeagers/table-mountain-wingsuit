@@ -22,7 +22,7 @@ On macOS or Linux replace `tools/terrain/.venv/Scripts/python.exe` with
 
 Timings on the reference laptop: fetch about 4 minutes (contours are 123 paged
 requests, Sentinel-2 bands are windowed reads of cloud-optimised GeoTIFFs),
-build about 3 minutes, validate a few seconds. Cache size about 120 MB.
+build about 5 minutes, validate a few seconds. Cache size about 160 MB.
 
 ## Scripts
 
