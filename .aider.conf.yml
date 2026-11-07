@@ -5,3 +5,5 @@ auto-commits: false
 dirty-commits: false
 attribute-author: false
 show-model-warnings: false
+gitignore: false
+check-update: false
