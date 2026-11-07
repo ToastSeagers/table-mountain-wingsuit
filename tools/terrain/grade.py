@@ -30,10 +30,15 @@ SHADOW_LIFT = 0.045  # added as lift * (1 - x)^2, so highlights are untouched
 WARM_MIDTONE_RGB = (8.0 / 255.0, 2.5 / 255.0, -6.0 / 255.0)  # +8 toward orange
 GREEN_DESATURATE = 0.15
 GREEN_MASK_WIDTH = 0.08  # how far G must exceed max(R, B) for the full effect
-SEA_BLUE = np.array([0.10, 0.30, 0.50], dtype=np.float32)
-SEA_MIX = 0.65  # how far sea pixels move toward SEA_BLUE (texture retained)
-SEA_BRIGHTEN = 1.6  # sea texture (foam, swell) gain before mixing
-NDWI_WATER_THRESHOLD = 0.05
+SEA_BLUE = np.array([0.16, 0.38, 0.58], dtype=np.float32)  # Atlantic at golden hour
+SEA_MIX = 0.85  # L2A sea is almost black, so paint most of the way to SEA_BLUE
+SEA_BRIGHTEN = 6.0  # sea texture (swell, shallows) gain before mixing
+NDWI_WATER_THRESHOLD = 0.3
+DARK_REFLECTANCE = 0.012  # below this the L2A correction has bottomed out: black water or hard shadow
+WATER_DILATE_PX = 6  # dark pixels this close (60 m) to known water are water (surf, glint-corrected shallows)
+SHADOW_FILL_RADIUS_PX = 8  # neighbourhood (80 m) whose lit colour replaces baked shadow
+SHADOW_FILL_MIX = 0.85  # the scene's 10:50 sun shadows fight the game's golden-hour lighting
+WATER_MAX_BRIGHTNESS = 0.09  # mean RGB reflectance; open sea is about 0.005, wet sand 0.18
 
 RAW_PATH = geo.CACHE_DIR / "imagery" / "s2_raw_10m.tif"
 GRADED_PATH = geo.CACHE_DIR / "imagery" / "graded_10m.tif"
@@ -49,11 +54,61 @@ def s2_reflectance_to_display(reflectance: np.ndarray) -> np.ndarray:
     return np.clip(x, 0.0, 1.0) ** DISPLAY_GAMMA
 
 
-def water_mask_from_ndwi(green: np.ndarray, nir: np.ndarray) -> np.ndarray:
-    """McFeeters NDWI on reflectance arrays; True where water."""
+def water_mask(rgb_refl: np.ndarray, nir: np.ndarray) -> np.ndarray:
+    """True where water: NDWI (McFeeters) high and the pixel is dark.
+
+    ``rgb_refl`` is (3, H, W) reflectance in R, G, B order. Wet sand and surf
+    also score high on NDWI, so the brightness test keeps beaches as land.
+    """
+    green = rgb_refl[1]
     denom = green + nir
     ndwi = np.where(denom > 1e-6, (green - nir) / np.maximum(denom, 1e-6), 0.0)
-    return ndwi > NDWI_WATER_THRESHOLD
+    brightness = rgb_refl.mean(axis=0)
+    return (ndwi > NDWI_WATER_THRESHOLD) & (brightness < WATER_MAX_BRIGHTNESS)
+
+
+def terrain_sea_on_raster(heights: np.ndarray, dst_transform, shape: tuple[int, int]) -> np.ndarray:
+    """Resample the built height field's sea (h <= 0) onto a raster of the given transform."""
+    from rasterio.enums import Resampling
+    from rasterio.warp import reproject
+
+    sea = (heights <= 0.0).astype(np.float32)
+    dst = np.zeros(shape, dtype=np.float32)
+    reproject(
+        sea,
+        dst,
+        src_transform=geo.height_sample_grid().geo_transform,
+        src_crs="EPSG:4326",
+        dst_transform=dst_transform,
+        dst_crs="EPSG:4326",
+        resampling=Resampling.average,
+    )
+    return dst > 0.5
+
+
+def extend_water_with_dark_fringe(water: np.ndarray, rgb_refl: np.ndarray) -> np.ndarray:
+    """Add near-black pixels that touch known water: shallows and surf the index misses."""
+    from scipy.ndimage import binary_dilation
+
+    dark = rgb_refl.mean(axis=0) < DARK_REFLECTANCE
+    near = binary_dilation(water, iterations=WATER_DILATE_PX)
+    return water | (dark & near)
+
+
+def fill_shadows(display_rgb: np.ndarray, water: np.ndarray, raw_brightness: np.ndarray) -> np.ndarray:
+    """Replace baked hard shadows on land with the average colour of lit pixels around them."""
+    from scipy.ndimage import uniform_filter
+
+    size = 2 * SHADOW_FILL_RADIUS_PX + 1
+    shadow = (raw_brightness < DARK_REFLECTANCE) & ~water
+    lit = (~shadow & ~water).astype(np.float32)
+    lit_sum = uniform_filter(lit, size=size, mode="nearest")
+    out = display_rgb.copy()
+    for ch in range(3):
+        col_sum = uniform_filter(display_rgb[..., ch] * lit, size=size, mode="nearest")
+        fill = np.where(lit_sum > 1e-3, col_sum / np.maximum(lit_sum, 1e-3), display_rgb[..., ch])
+        out[..., ch] = np.where(shadow, display_rgb[..., ch] + (fill - display_rgb[..., ch]) * SHADOW_FILL_MIX, display_rgb[..., ch])
+    return out
 
 
 def grade_rgb(display_rgb: np.ndarray, water: np.ndarray | None = None) -> np.ndarray:
@@ -92,11 +147,17 @@ def grade_s2_raw(raw_path: Path = RAW_PATH, out_path: Path = GRADED_PATH) -> Pat
     with rasterio.open(raw_path) as src:
         dn = src.read().astype(np.float32)
         profile = src.profile.copy()
-        offset = float(src.tags().get("BOA_ADD_OFFSET", "-1000"))
+        offset = float(src.tags().get("BOA_ADD_OFFSET", "0"))
     refl = np.clip((dn + offset) / 10000.0, 0.0, 1.0)
     rgb = np.moveaxis(refl[:3], 0, -1)
-    water = water_mask_from_ndwi(refl[1], refl[3])
-    graded = grade_rgb(s2_reflectance_to_display(rgb), water)
+    water = water_mask(refl[:3], refl[3])
+    heights = geo.CACHE_DIR / "heights_5m.npy"
+    if heights.exists():
+        # Agree with the terrain: wherever the built heights are sea, grade as sea.
+        water |= terrain_sea_on_raster(np.load(heights), profile["transform"], water.shape)
+    water = extend_water_with_dark_fringe(water, refl[:3])
+    display = fill_shadows(s2_reflectance_to_display(rgb), water, refl[:3].mean(axis=0))
+    graded = grade_rgb(display, water)
     profile.update(count=3, dtype="uint8", compress="deflate", photometric="RGB")
     profile.pop("nodata", None)
     with rasterio.open(out_path, "w", **profile) as dst:

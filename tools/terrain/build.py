@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import time
 from datetime import date
 from pathlib import Path
@@ -29,6 +28,7 @@ from PIL import Image
 from rasterio.enums import Resampling
 from rasterio.warp import reproject
 from scipy.interpolate import LinearNDInterpolator
+from scipy.ndimage import distance_transform_edt, label
 from scipy.spatial import QhullError
 
 import geo
@@ -40,11 +40,17 @@ DENSIFY_SPACING_M = 4.0  # points added along contour segments so Delaunay edges
 BLOCK_SAMPLES = 256  # interpolation block size in grid samples
 BLOCK_MARGIN_M = 150.0  # contour points gathered beyond each block
 SEA_HEIGHT_MAX_M = 2.5  # interpolated heights below this where GLO-30 says water become 0
+GLO30_WATER_MAX_M = 0.01  # GLO-30 ocean is exactly 0; bilinear resampling blurs the coast slightly
+SEA_OFFSHORE_M = 60.0  # GLO-30 water mask seeds the flood fill only this far beyond its own coastline
+SEA_RAMP_M = 25.0  # low land within this distance of the sea slopes down to 0 at the waterline
+SEA_MIN_ENCLOSED_CELLS = 200  # low water bodies this big (0.5 ha) are sea even if breakwaters cut them off
+SEA_WATER_INDEX_MAX_M = 6.0  # imagery water up to quay height counts: dock basins interpolate at 2..5 m between quay contours
 WEBP_QUALITY = 80
 
 S2_RAW_PATH = grade.RAW_PATH
 GRADED_PATH = grade.GRADED_PATH
-HEIGHTS_CACHE = geo.CACHE_DIR / "heights_5m.npy"
+HEIGHTS_CACHE = geo.CACHE_DIR / "heights_5m.npy"  # final, after sea mask
+INTERP_CACHE = geo.CACHE_DIR / "heights_interp_5m.npy"  # raw interpolation, reused unless --reinterpolate
 
 
 # --------------------------------------------------------------------------- heights
@@ -139,20 +145,66 @@ def glo30_on_grid(glo30_path: Path) -> np.ndarray:
             dst_transform=grid.geo_transform,
             dst_crs="EPSG:4326",
             resampling=Resampling.bilinear,
-            dst_nodata=0.0,
+            src_nodata=-32767.0,  # GLO-30 has no nodata tag; this keeps GDAL from treating 0 as nodata
+            dst_nodata=-32767.0,
         )
-    return dst
+    return np.where(dst <= -32767.0, 0.0, dst)
 
 
-def build_heights(contours_npz: Path, glo30_path: Path) -> np.ndarray:
-    h = interpolate_heights(contours_npz)
+def s2_water_on_height_grid() -> np.ndarray:
+    """Sentinel-2 water mask (grade.water_mask) resampled onto the height samples."""
+    grid = geo.height_sample_grid()
+    with rasterio.open(S2_RAW_PATH) as src:
+        dn = src.read().astype(np.float32)
+        offset = float(src.tags().get("BOA_ADD_OFFSET", "0"))
+        src_transform, src_crs = src.transform, src.crs
+    refl = np.clip((dn + offset) / 10000.0, 0.0, 1.0)
+    water = grade.water_mask(refl[:3], refl[3]).astype(np.float32)
+    dst = np.zeros((grid.height, grid.width), dtype=np.float32)
+    reproject(
+        water,
+        dst,
+        src_transform=src_transform,
+        src_crs=src_crs,
+        dst_transform=grid.geo_transform,
+        dst_crs="EPSG:4326",
+        resampling=Resampling.bilinear,
+    )
+    return dst > 0.5
+
+
+def build_heights(contours_npz: Path, glo30_path: Path, reinterpolate: bool = False) -> np.ndarray:
+    if INTERP_CACHE.exists() and not reinterpolate:
+        print(f"heights: reusing {INTERP_CACHE.name} (pass --reinterpolate to redo the Delaunay step)")
+        h = np.load(INTERP_CACHE)
+    else:
+        h = interpolate_heights(contours_npz)
+        np.save(INTERP_CACHE, h)
     glo = glo30_on_grid(glo30_path)
     nan = np.isnan(h)
     print(f"heights: {nan.mean() * 100:.1f}% of samples outside the contour hull (open sea)")
     h = np.where(nan, 0.0, h)
-    # GLO-30 stores open ocean as exactly 0; land cells partly over water are > 0.
-    sea = (glo <= 0.0) & (h < SEA_HEIGHT_MAX_M)
+    # The lowest contour along most of the coast is 2 m, so the Delaunay step
+    # spans the bays with a flat shelf at about 2 m. Sea is that shelf, found by
+    # flooding from open water (GLO-30 water well beyond its own 30 m coast)
+    # through low cells that the Sentinel-2 water index also calls water, so
+    # the shoreline comes from 10 m imagery, not the blocky GLO-30 mask, and
+    # beaches keep their interpolated 0..2 m. A short ramp eases the step at
+    # the waterline. Dredged basins (negative) clamp to 0.
+    glo_land = glo >= GLO30_WATER_MAX_M
+    open_water = (distance_transform_edt(~glo_land) * geo.CELL_SIZE_M > SEA_OFFSHORE_M) & (h < SEA_HEIGHT_MAX_M)
+    water_idx = s2_water_on_height_grid()
+    candidate = open_water | ((h < SEA_WATER_INDEX_MAX_M) & water_idx)
+    labels, n_labels = label(candidate)
+    touching = np.unique(labels[open_water])
+    areas = np.bincount(labels.ravel(), minlength=n_labels + 1)
+    big = np.flatnonzero(areas >= SEA_MIN_ENCLOSED_CELLS)
+    keep = np.union1d(touching[touching > 0], big[big > 0])
+    sea = np.isin(labels, keep)
     h = np.where(sea, 0.0, h)
+    dist_m = distance_transform_edt(~sea) * geo.CELL_SIZE_M
+    ramp = np.clip(dist_m / SEA_RAMP_M, 0.0, 1.0)
+    h = np.where(h < SEA_HEIGHT_MAX_M, h * ramp, h)
     h = np.maximum(h, 0.0)
     print(f"heights: range {h.min():.1f}..{h.max():.1f} m, sea {sea.mean() * 100:.1f}% of samples")
     return h.astype(np.float32)
@@ -160,9 +212,9 @@ def build_heights(contours_npz: Path, glo30_path: Path) -> np.ndarray:
 
 def write_height_tiles(h: np.ndarray, out_dir: Path) -> int:
     hd = out_dir / "h"
-    if hd.exists():
-        shutil.rmtree(hd)
-    hd.mkdir(parents=True)
+    hd.mkdir(parents=True, exist_ok=True)
+    for stale in hd.glob("*.bin"):
+        stale.unlink()
     q = np.clip(np.round((h - geo.HEIGHT_OFFSET) / geo.HEIGHT_SCALE), 0, 65535).astype("<u2")
     step = geo.HEIGHT_TILE_SIZE - 1
     total = 0
@@ -187,7 +239,11 @@ def s2_raw_on_grid(scene_dir: Path) -> Path:
     bands = ["B04", "B03", "B02", "B08"]
     dst = np.zeros((len(bands), grid.height, grid.width), dtype=np.uint16)
     item = json.loads((scene_dir / "stac_item.json").read_text(encoding="utf-8"))
-    offset = -1000 if float(item["properties"].get("s2:processing_baseline", "05.00")) >= 4.0 else 0
+    # Baseline >= 04.00 adds 1000 to every DN, but Earth Search's COGs already
+    # have that offset removed (earthsearch:boa_offset_applied). Honour the flag.
+    props = item["properties"]
+    offset_applied = bool(props.get("earthsearch:boa_offset_applied", False))
+    offset = 0 if offset_applied or float(props.get("s2:processing_baseline", "05.00")) < 4.0 else -1000
     for i, band in enumerate(bands):
         with rasterio.open(scene_dir / f"{band}.tif") as src:
             reproject(
@@ -233,9 +289,9 @@ def graded_full_res(imagery: str) -> np.ndarray:
         rgb = np.moveaxis(src.read(), 0, -1).astype(np.float32) / 255.0
     with rasterio.open(S2_RAW_PATH) as src:
         dn = src.read().astype(np.float32)
-        offset = float(src.tags().get("BOA_ADD_OFFSET", "-1000"))
+        offset = float(src.tags().get("BOA_ADD_OFFSET", "0"))
     refl = np.clip((dn + offset) / 10000.0, 0.0, 1.0)
-    water_small = grade.water_mask_from_ndwi(refl[1], refl[3])
+    water_small = grade.water_mask(refl[:3], refl[3])
     water = np.asarray(Image.fromarray(water_small.astype(np.uint8) * 255).resize((tg.width, tg.height), Image.Resampling.BILINEAR)) > 127
     out = np.empty(rgb.shape, dtype=np.uint8)
     rows = geo.TEXTURE_TILE_SIZE
@@ -246,9 +302,9 @@ def graded_full_res(imagery: str) -> np.ndarray:
 
 def write_texture_tiles(full: np.ndarray, out_dir: Path) -> int:
     td = out_dir / "t"
-    if td.exists():
-        shutil.rmtree(td)
-    td.mkdir(parents=True)
+    td.mkdir(parents=True, exist_ok=True)
+    for stale in td.glob("*.webp"):
+        stale.unlink()
     s = geo.TEXTURE_TILE_SIZE
     total = 0
     for row in range(geo.TEXTURE_ROWS):
@@ -334,23 +390,29 @@ def main() -> None:
     ap.add_argument("--textures-only", action="store_true")
     ap.add_argument("--imagery", choices=["s2", "cct-aerial"], default="s2")
     ap.add_argument("--regrade", action="store_true", help="re-run grade.py on the cached raw before tiling")
+    ap.add_argument("--reinterpolate", action="store_true", help="redo the contour interpolation instead of reusing the cache")
     args = ap.parse_args()
 
     out_dir = geo.OUTPUT_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
     cache = geo.CACHE_DIR
 
+    scene_dirs = sorted(p for p in (cache / "s2").iterdir() if p.is_dir()) if (cache / "s2").exists() else []
+    if not scene_dirs:
+        raise SystemExit("no Sentinel-2 scene in cache; run fetch.py first")
+    if not S2_RAW_PATH.exists():
+        s2_raw_on_grid(scene_dirs[-1])
+
     if not args.textures_only:
-        h = build_heights(cache / "contours" / "contours.npz", cache / "glo30" / "Copernicus_DSM_COG_10_S34_00_E018_00_DEM.tif")
+        h = build_heights(
+            cache / "contours" / "contours.npz",
+            cache / "glo30" / "Copernicus_DSM_COG_10_S34_00_E018_00_DEM.tif",
+            args.reinterpolate,
+        )
         np.save(HEIGHTS_CACHE, h)
         write_height_tiles(h, out_dir)
 
     if not args.heights_only:
-        scene_dirs = sorted(p for p in (cache / "s2").iterdir() if p.is_dir()) if (cache / "s2").exists() else []
-        if not scene_dirs:
-            raise SystemExit("no Sentinel-2 scene in cache; run fetch.py first")
-        if not S2_RAW_PATH.exists():
-            s2_raw_on_grid(scene_dirs[-1])
         if args.imagery == "s2" and (args.regrade or not GRADED_PATH.exists()):
             grade.grade_s2_raw()
         full = graded_full_res(args.imagery)

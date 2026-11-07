@@ -33,6 +33,25 @@ GRADED = geo.CACHE_DIR / "imagery" / "graded_10m.tif"
 OUT = geo.CACHE_DIR / "refine"
 EXIT_SEARCH_M = 220.0
 ZONE_SEARCH_M = 180.0
+# Per-site search radii, after eyeballing the first pass on the City aerial:
+# the-table's authored point is 130 m below the western edge, and with a wider
+# search it drifts 200 m north to the cable-station corner; 170 m reaches the
+# edge south-west of the station without reaching the station.
+SEARCH_OVERRIDE_M = {"the-table": 170.0}
+# Placed by hand on the January 2025 City aerial imagery where the DEM alone
+# cannot tell a lawn from a flat roof: Sea Point lawns run along the promenade
+# (buildings are equally flat in a bare-earth DEM), and the Upper Orange field
+# is the fenced grass east of the Molteno reservoir, not the reservoir wall.
+# The Table: the western edge runs north-south at lon 18.4026; the search picks
+# the biggest drop 55 m north of the authored latitude, which is 50 m from the
+# cable station. Pinning it due east of the authored point keeps it on the same
+# edge, about 1050 m, and 85 m south-west of the station as the design asks.
+MANUAL_EXIT_LAT_LON = {"the-table": (-33.9585, 18.4026)}
+MANUAL_LAT_LON = {
+    "sea-point-prom": (-33.9120, 18.3891),
+    "upper-orange": (-33.9386, 18.4148),
+    "clifton": (-33.9409, 18.3745),  # Fourth Beach sand; the authored point is on the houses at Third Beach
+}
 CELL = geo.CELL_SIZE_M
 
 
@@ -65,9 +84,9 @@ def profile(h: np.ndarray, x: float, z: float, heading_deg: float, dists: np.nda
     return np.array([bilinear(h, *world_to_rc(x + dx * d, z + dz * d)) for d in dists])
 
 
-def refine_exit(h: np.ndarray, x0: float, z0: float, heading_deg: float) -> tuple[float, float, float, dict]:
+def refine_exit(h: np.ndarray, x0: float, z0: float, heading_deg: float, search_m: float = EXIT_SEARCH_M) -> tuple[float, float, float, dict]:
     r0, c0 = world_to_rc(x0, z0)
-    n = int(EXIT_SEARCH_M / CELL)
+    n = int(search_m / CELL)
     rr, cc = np.mgrid[int(r0) - n : int(r0) + n + 1, int(c0) - n : int(c0) + n + 1]
     inside = (rr - r0) ** 2 + (cc - c0) ** 2 <= n * n
     local_top = h[rr[inside], cc[inside]].max()
@@ -81,7 +100,8 @@ def refine_exit(h: np.ndarray, x0: float, z0: float, heading_deg: float) -> tupl
         drop = here - p.min()
         if p[0] > here - 5.0:
             continue  # ground ahead is level: still 30 m back from the edge
-        score = drop + 0.25 * (here - local_top)  # prefer big drops, then height
+        dist_pen = 0.15 * np.hypot(x - x0, z - z0)  # 100 m of travel costs 15 m of drop
+        score = drop + 0.25 * (here - local_top) - dist_pen  # prefer big drops, then height, near the author's point
         if best is None or score > best[0]:
             best = (score, x, z, here, drop)
     assert best is not None
@@ -96,10 +116,10 @@ def slope_deg(h: np.ndarray) -> np.ndarray:
 
 
 def refine_zone(
-    h: np.ndarray, slope: np.ndarray, img: np.ndarray, x0: float, z0: float, radius_m: float, surface: str
+    h: np.ndarray, slope: np.ndarray, img: np.ndarray, x0: float, z0: float, radius_m: float, surface: str, search_m: float = ZONE_SEARCH_M
 ) -> tuple[float, float, float, dict]:
     r0, c0 = world_to_rc(x0, z0)
-    n = int(ZONE_SEARCH_M / CELL)
+    n = int(search_m / CELL)
     k = max(3, int(round(radius_m / CELL)) | 1)
     mean_slope = uniform_filter(slope, size=k, mode="nearest")
     land = uniform_filter((h > 0.3).astype(np.float32), size=k, mode="nearest")
@@ -124,7 +144,7 @@ def refine_zone(
             continue
         if surface == "sand" and (land[r, c] < 0.3 or h[r, c] <= 0.3):
             continue
-        dist_pen = np.hypot(x - x0, z - z0) / ZONE_SEARCH_M
+        dist_pen = np.hypot(x - x0, z - z0) / search_m
         score = mean_slope[r, c] * (1.0 - 0.5 * look) + 2.0 * dist_pen
         if best is None or score < best[0]:
             best = (score, x, z, h[r, c], mean_slope[r, c])
@@ -182,7 +202,14 @@ def main() -> None:
     for e in exits["exits"]:
         lat0, lon0 = e["latLon"]["lat"], e["latLon"]["lon"]
         x0, _, z0 = geo.lat_lon_to_world(lat0, lon0)
-        x, z, y, info = refine_exit(h, x0, z0, e["headingDeg"])
+        if e["id"] in MANUAL_EXIT_LAT_LON:
+            mlat, mlon = MANUAL_EXIT_LAT_LON[e["id"]]
+            x, _, z = geo.lat_lon_to_world(mlat, mlon)
+            y = bilinear(h, *world_to_rc(x, z))
+            far = profile(h, x, z, e["headingDeg"], np.arange(0, 801, 50))
+            info = {"manual": "pinned on the western edge", "profile50m": [round(float(v)) for v in far]}
+        else:
+            x, z, y, info = refine_exit(h, x0, z0, e["headingDeg"], SEARCH_OVERRIDE_M.get(e["id"], EXIT_SEARCH_M))
         lat, lon = geo.world_to_lat_lon(x, z)
         moved = np.hypot(x - x0, z - z0)
         print(f"{e['id']:<18} {lat0:9.4f} {lon0:9.4f} {e['elevationM']:6.0f}   {lat:9.4f} {lon:9.4f} {y:6.0f}  {moved:4.0f} m  {info}")
@@ -196,7 +223,12 @@ def main() -> None:
     for zn in zones["zones"]:
         lat0, lon0 = zn["latLon"]["lat"], zn["latLon"]["lon"]
         x0, _, z0 = geo.lat_lon_to_world(lat0, lon0)
-        x, z, y, info = refine_zone(h, slope, img, x0, z0, zn["radiusM"], zn["surface"])
+        if zn["id"] in MANUAL_LAT_LON:
+            mlat, mlon = MANUAL_LAT_LON[zn["id"]]
+            x, _, z = geo.lat_lon_to_world(mlat, mlon)
+            y, info = bilinear(h, *world_to_rc(x, z)), {"manual": "placed on City aerial imagery"}
+        else:
+            x, z, y, info = refine_zone(h, slope, img, x0, z0, zn["radiusM"], zn["surface"], SEARCH_OVERRIDE_M.get(zn["id"], ZONE_SEARCH_M))
         lat, lon = geo.world_to_lat_lon(x, z)
         moved = np.hypot(x - x0, z - z0)
         print(f"{zn['id']:<18} {lat0:9.4f} {lon0:9.4f} {'':>6}   {lat:9.4f} {lon:9.4f} {y:6.1f}  {moved:4.0f} m  {info}")
