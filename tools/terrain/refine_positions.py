@@ -42,11 +42,11 @@ SEARCH_OVERRIDE_M = {"the-table": 170.0}
 # cannot tell a lawn from a flat roof: Sea Point lawns run along the promenade
 # (buildings are equally flat in a bare-earth DEM), and the Upper Orange field
 # is the fenced grass east of the Molteno reservoir, not the reservoir wall.
-# The Table: the western edge runs north-south at lon 18.4026; the search picks
-# the biggest drop 55 m north of the authored latitude, which is 50 m from the
-# cable station. Pinning it due east of the authored point keeps it on the same
-# edge, about 1050 m, and 85 m south-west of the station as the design asks.
-MANUAL_EXIT_LAT_LON = {"the-table": (-33.9585, 18.4026)}
+# The Table: the authored point is 300 m below the western edge, which at that
+# latitude is 215 m further east. The search picks the biggest drop 55 m north
+# of there, 50 m from the cable station; pinning it due east of the authored
+# point keeps it on the edge (about 1050 m) and 80 m south of the station.
+MANUAL_EXIT_LAT_LON = {"the-table": (-33.9585, 18.4033)}
 MANUAL_LAT_LON = {
     "sea-point-prom": (-33.9120, 18.3891),
     "upper-orange": (-33.9386, 18.4148),
