@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "originLat": -33.95,
+  "originLon": 18.41,
+  "boundsWorld": {
+    "minX": -5925.0,
+    "maxX": 6850.0,
+    "minZ": -5665.0,
+    "maxZ": 4555.0
+  },
+  "cellSizeM": 5.0,
+  "heightTiles": {
+    "size": 512,
+    "cols": 5,
+    "rows": 4,
+    "format": "r16",
+    "path": "h/{col}_{row}.bin",
+    "heightScale": 0.05,
+    "heightOffset": 0.0
+  },
+  "textureTiles": {
+    "size": 1024,
+    "cols": 10,
+    "rows": 8,
+    "format": "webp",
+    "path": "t/{col}_{row}.webp"
+  },
+  "overview": {
+    "path": "overview.webp",
+    "size": 2048
+  },
+  "source": {
+    "dem": "City of Cape Town Ground Level Map 2 m contours (CCT GLM 2019, LiDAR 2019B, 0.3 m vertical accuracy), linearly interpolated to 5 m; Copernicus GLO-30 used only as the sea mask",
+    "imagery": "City of Cape Town aerial orthophoto mosaic January 2025 (5 cm source, exported at 1.25 m/px from the City image server), graded",
+    "licence": "DEM: City of Cape Town Open Data Terms of Use (free, as-is). Sea mask: Copernicus DEM GLO-30, ESA/Airbus licence, attribution required. Imagery: City of Cape Town Open Data Terms of Use, imagery property of the City, no restrictions for non-commercial purposes (this game is non-commercial), attribution given."
+  },
+  "checkpoints": [
+    {
+      "name": "Maclear's Beacon",
+      "x": 1431.9,
+      "z": 1863.8,
+      "expectedY": 1085
+    },
+    {
+      "name": "Upper cable station",
+      "x": -628.2,
+      "z": 865.3,
+      "expectedY": 1067
+    },
+    {
+      "name": "Lion's Head summit",
+      "x": -1930.7,
+      "z": -1664.1,
+      "expectedY": 669
+    },
+    {
+      "name": "Signal Hill summit",
+      "x": -572.8,
+      "z": -3661.0,
+      "expectedY": 350
+    },
+    {
+      "name": "Camps Bay beach (sea)",
+      "x": -3122.4,
+      "z": 110.9,
+      "expectedY": 0
+    },
+    {
+      "name": "Sea Point promenade",
+      "x": -1847.6,
+      "z": -4160.3,
+      "expectedY": 5
+    }
+  ],
+  "generated": "2026-11-08"
+}

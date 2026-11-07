@@ -2,10 +2,13 @@ node_modules
 dist
 .env
 tools/terrain/cache/
+tools/terrain/.venv/
+tools/terrain/__pycache__/
 *.local
 
 # Aider (local lane) working files
 .aider.tags.cache.d/
+.aider.tags.cache.v4/
 .aider.chat.history.md
 .aider.input.history
 .aider.llm.history
