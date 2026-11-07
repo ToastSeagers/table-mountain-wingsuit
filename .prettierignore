@@ -1,0 +1,9 @@
+node_modules
+dist
+public
+package-lock.json
+docs/status/tracker.html
+docs
+data
+*.md
+src/types

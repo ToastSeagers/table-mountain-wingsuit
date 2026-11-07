@@ -1,0 +1,12 @@
+{
+  "_comment": "Known points for validating the coordinate frame (Stage 0) and the DEM (Stage 1). lat/lon approximate; elevations in metres ASL with tolerance.",
+  "origin": { "lat": -33.95, "lon": 18.41 },
+  "points": [
+    { "name": "Maclear's Beacon",       "lat": -33.9628, "lon": 18.4098, "expectedY": 1085, "toleranceM": 15 },
+    { "name": "Upper cable station",    "lat": -33.9566, "lon": 18.4036, "expectedY": 1067, "toleranceM": 15 },
+    { "name": "Lion's Head summit",     "lat": -33.9353, "lon": 18.3890, "expectedY": 669,  "toleranceM": 15 },
+    { "name": "Signal Hill summit",     "lat": -33.9218, "lon": 18.3990, "expectedY": 350,  "toleranceM": 15 },
+    { "name": "Camps Bay beach (sea)",  "lat": -33.9510, "lon": 18.3770, "expectedY": 0,    "toleranceM": 3 },
+    { "name": "Sea Point promenade",    "lat": -33.9125, "lon": 18.3900, "expectedY": 5,    "toleranceM": 5 }
+  ]
+}

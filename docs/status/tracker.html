@@ -1,0 +1,453 @@
+<title>Wingsuit Build Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  /* Layout: a retro sports-game "event board". Stage cards in the main column,
+     a side rail with what to do next, agent settings and the log. Committed single
+     dark look: this is the game's own chrome (ink panels, sun accent). */
+  :root {
+    --ink: #1b1230;
+    --ink-2: #261a42;
+    --ink-3: #32245a;
+    --paper: #f4e9d2;
+    --muted: #a797c4;
+    --sun: #ffb347;
+    --coral: #ff5e5b;
+    --sea: #3fb8c9;
+    --fynbos: #7fb069;
+    --line: #4a3a76;
+    --display: 'Press Start 2P', 'Courier New', monospace;
+    --body: 'IBM Plex Mono', 'Consolas', 'Courier New', monospace;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ink); color: var(--paper);
+    font-family: var(--body); font-size: 15px; line-height: 1.55;
+    padding-block: 24px 48px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    background-image: repeating-linear-gradient(0deg, rgba(0,0,0,.08) 0 1px, transparent 1px 3px);
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  h1, h2, h3 { font-family: var(--display); text-wrap: balance; margin: 0; font-weight: 400; }
+  h1 { font-size: clamp(16px, 2.6vw, 24px); line-height: 1.5; color: var(--sun); text-shadow: 4px 4px 0 #000; }
+  h2 { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--sea); }
+  h3 { font-size: 12px; line-height: 1.6; }
+  p { margin: 0; }
+  a { color: var(--sea); }
+  code { font-family: var(--body); background: var(--ink-3); padding: 0 4px; font-size: .92em; }
+
+  .panel { background: var(--ink-2); border: 4px solid var(--paper); box-shadow: 8px 8px 0 #000; padding: 16px; }
+  .panel + .panel { margin-top: 20px; }
+
+  header.top { display: flex; flex-wrap: wrap; gap: 16px 32px; align-items: flex-end; justify-content: space-between; margin-bottom: 24px; }
+  .sub { color: var(--muted); font-size: 13px; max-width: 60ch; }
+  .meter { display: grid; gap: 6px; min-width: min(360px, 100%); }
+  .meter .bar { height: 18px; border: 3px solid var(--paper); background: var(--ink-3); position: relative; }
+  .meter .bar > i { position: absolute; inset: 0 auto 0 0; background: var(--sun); width: 0%; transition: width .2s steps(8); }
+  .meter .bar > i.g { background: var(--fynbos); }
+  .meter .lbl { display: flex; justify-content: space-between; font-family: var(--display); font-size: 9px; color: var(--muted); }
+  .meter .lbl b { color: var(--paper); font-weight: 400; font-variant-numeric: tabular-nums; }
+
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px); gap: 24px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .grid > * { min-width: 0; }
+
+  .notice { border: 3px dashed var(--line); padding: 10px 12px; font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+  .notice.warn { border-color: var(--coral); color: var(--paper); }
+
+  .stage { border: 4px solid var(--line); background: var(--ink-2); margin-bottom: 16px; box-shadow: 6px 6px 0 #000; }
+  .stage[data-status="in_progress"] { border-color: var(--sun); }
+  .stage[data-status="blocked"] { border-color: var(--coral); }
+  .stage[data-status="done"] { border-color: var(--fynbos); }
+  .stage > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px 14px; align-items: center; padding: 12px 14px; }
+  .stage > summary::-webkit-details-marker { display: none; }
+  .stage > summary:focus-visible { outline: 3px solid var(--sea); outline-offset: -3px; }
+  .num { font-family: var(--display); font-size: 18px; color: var(--sun); width: 44px; height: 44px; display: grid; place-items: center; border: 3px solid var(--paper); background: var(--ink); }
+  .stage[data-status="done"] .num { background: var(--fynbos); color: var(--ink); border-color: var(--fynbos); }
+  .stage[data-status="blocked"] .num { background: var(--coral); color: var(--ink); border-color: var(--coral); }
+  .ttl { display: grid; gap: 4px; }
+  .ttl .role { font-size: 12px; color: var(--muted); }
+  .pill { font-family: var(--display); font-size: 8px; letter-spacing: .04em; text-transform: uppercase; padding: 6px 8px; border: 2px solid currentColor; white-space: nowrap; }
+  .pill.pending { color: var(--muted); }
+  .pill.in_progress { color: var(--sun); }
+  .pill.blocked { color: var(--coral); }
+  .pill.done { color: var(--fynbos); }
+  .pill.ready { color: var(--sea); }
+  .body { border-top: 3px solid var(--line); padding: 14px; display: grid; gap: 16px; }
+  .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; font-size: 13px; }
+  .meta div { background: var(--ink); padding: 8px 10px; border-left: 4px solid var(--sea); }
+  .meta b { display: block; font-family: var(--display); font-size: 8px; color: var(--muted); margin-bottom: 4px; text-transform: uppercase; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  label.inl { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; }
+  select, input[type=text], textarea {
+    font-family: var(--body); font-size: 14px; color: var(--paper); background: var(--ink); border: 3px solid var(--paper); padding: 6px 8px;
+  }
+  select:focus-visible, input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+  textarea { width: 100%; min-height: 72px; resize: vertical; }
+  input[type=text] { min-width: 0; width: 100%; }
+  .gate { display: grid; gap: 6px; }
+  .gate label { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; font-size: 14px; padding: 6px 8px; background: var(--ink); }
+  .gate label.ok { color: var(--fynbos); text-decoration: line-through; text-decoration-color: var(--line); }
+  .gate input { width: 18px; height: 18px; margin: 3px 0 0; accent-color: var(--fynbos); }
+  .dates { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  button.btn { font-family: var(--display); font-size: 9px; text-transform: uppercase; background: var(--sun); color: var(--ink); border: 3px solid var(--paper); box-shadow: 4px 4px 0 #000; padding: 8px 12px; cursor: pointer; }
+  button.btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #000; }
+  button.btn.ghost { background: var(--ink); color: var(--paper); }
+  button.btn[disabled] { opacity: .45; cursor: default; }
+  .readonly select, .readonly input, .readonly textarea, .readonly button.btn { pointer-events: none; opacity: .6; }
+
+  aside .panel { padding: 14px; }
+  .next { display: grid; gap: 8px; }
+  .next .item { background: var(--ink); padding: 10px 12px; border-left: 4px solid var(--sea); font-size: 13px; }
+  .next .item.run { border-left-color: var(--sun); }
+  .next .item.blk { border-left-color: var(--coral); }
+  .next .item b { font-family: var(--display); font-size: 8px; display: block; margin-bottom: 4px; text-transform: uppercase; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 6px 4px; border-bottom: 2px solid var(--line); vertical-align: top; }
+  th { font-family: var(--display); font-size: 7px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  td:first-child { font-family: var(--display); font-size: 10px; color: var(--sun); }
+  .tbl { overflow-x: auto; }
+  .log { display: grid; gap: 6px; max-height: 360px; overflow: auto; font-size: 12px; }
+  .log div { padding: 6px 8px; background: var(--ink); border-left: 3px solid var(--line); }
+  .log time { color: var(--muted); display: block; font-size: 11px; font-variant-numeric: tabular-nums; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  footer { margin-top: 32px; font-size: 12px; color: var(--muted); text-align: center; }
+  @media (prefers-reduced-motion: reduce) { .meter .bar > i { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>TABLE MOUNTAIN WINGSUIT<br>BUILD TRACKER</h1>
+      <p class="sub">Seven stages, one agent session each. Tick gate items as you verify them, set the status, and the board tells you what to start next. Plan details live in the repo under <code>PLAN.md</code> and <code>docs/</code>.</p>
+    </div>
+    <div class="meter" aria-live="polite">
+      <div class="lbl"><span>STAGES DONE</span><b id="m-stages">0 / 7</b></div>
+      <div class="bar"><i id="b-stages" class="g"></i></div>
+      <div class="lbl"><span>GATE ITEMS VERIFIED</span><b id="m-gates">0 / 0</b></div>
+      <div class="bar"><i id="b-gates"></i></div>
+    </div>
+  </header>
+
+  <div id="notice" class="notice" hidden></div>
+
+  <div class="grid">
+    <main id="stages" aria-label="Stages"></main>
+
+    <aside>
+      <section class="panel">
+        <h2>Up next</h2>
+        <div id="next" class="next" style="margin-top:10px"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Agent settings</h2>
+        <p class="sub" style="margin:8px 0 10px">Set these when you open each stage session. Full reasoning in <code>docs/05-agent-settings.md</code>.</p>
+        <div class="tbl">
+          <table id="settings">
+            <thead><tr><th>Stage</th><th>Model</th><th>Effort</th><th>Mode</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Activity</h2>
+        <div id="log" class="log" style="margin-top:10px"><div>No activity yet.</div></div>
+      </section>
+    </aside>
+  </div>
+
+  <footer>Order of play: 0 → (1 ∥ 3) → 2 → 4 (∥ 5 audio) → 5 → 6. Merge only after the gate passes.</footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---- The plan (static; mirrors PLAN.md and docs/02-stages.md) ----------
+  const STAGES = [
+    { id: 's0', n: 0, name: 'Project bootstrap', role: 'Orchestrator (bootstrap)', brief: 'docs/agents/00-orchestrator.md',
+      model: 'Sonnet 5.5', effort: 'medium', mode: 'auto', deps: [], parallel: [],
+      gate: ['npm install && npm run dev shows scene and pixel-font HUD',
+             'npm test, lint, typecheck and build all pass',
+             'src/types/ matches docs/01-architecture.md section 5',
+             'Geo conversion test passes for every checkpoint',
+             'Stage 0 report written with reference laptop spec'] },
+    { id: 's1', n: 1, name: 'Terrain data pipeline', role: 'Terrain Data Engineer', brief: 'docs/agents/01-terrain-data.md',
+      model: 'Opus 5.5', effort: 'high', mode: 'auto + browser', deps: ['s0'], parallel: ['s3'],
+      gate: ['validate.py passes all checkpoints within tolerance',
+             'public/terrain/ is under 60 MB',
+             'No visible seams in preview.png',
+             'DEM and imagery rows in docs/ASSETS.md with licence',
+             'tools/terrain/README.md lets a stranger rebuild'] },
+    { id: 's2', n: 2, name: 'Terrain renderer + free camera', role: 'Rendering Engineer', brief: 'docs/agents/02-render-engine.md',
+      model: 'Opus 5.5', effort: 'high', mode: 'plan, then auto', deps: ['s1'], parallel: ['s3'],
+      gate: ['60 fps at 1080p at all three exits and over Camps Bay',
+             'Triangle and draw-call budgets met (perf overlay)',
+             'TerrainSampler vs mesh test under 1 m error',
+             'Landmarks recognisable in report screenshots',
+             'No cracks or popping worse than noted in the report'] },
+    { id: 's3', n: 3, name: 'Flight model (headless)', role: 'Flight Physics Engineer', brief: 'docs/agents/03-flight-physics.md',
+      model: 'Opus 5.5', effort: 'xhigh', mode: 'plan, then auto', deps: ['s0'], parallel: ['s1', 's2'],
+      gate: ['Vitest suite passes',
+             'Trim glide 2.8 to 3.2, dive speed and start arc within spec',
+             'Camps Bay scenario lands on the beach with deploy at 200 m AGL',
+             'Deterministic replay test passes',
+             'No Three.js imports in src/flight/'] },
+    { id: 's4', n: 4, name: 'Game loop, UI, scoring', role: 'Gameplay and UI Engineer', brief: 'docs/agents/04-game-loop-ui.md',
+      model: 'Sonnet 5.5', effort: 'high', mode: 'auto', deps: ['s2', 's3'], parallel: ['s5'],
+      gate: ['Full loop for all three exits without a console error',
+             'Crash, out-of-bounds and water landing handled',
+             'Exits and zones only from data/; a fourth JSON exit appears in UI',
+             'High scores persist across reload',
+             'Gamepad works'] },
+    { id: 's5', n: 5, name: 'Audio, post-FX, replay', role: 'Audio and Post-FX Engineer', brief: 'docs/agents/05-audio-postfx.md',
+      model: 'Sonnet 5.5', effort: 'medium', mode: 'auto', deps: ['s3', 's4'], parallel: ['s4'],
+      gate: ['All sounds present and respond to state',
+             'Post-stack presets work; medium holds 60 fps',
+             'Replay plays after every run and can be skipped',
+             'Settings expose audio and quality'] },
+    { id: 's6', n: 6, name: 'QA, balance, perf, release', role: 'QA and Release Engineer', brief: 'docs/agents/06-qa-release.md',
+      model: 'Sonnet 5.5 (+ Haiku sweeps)', effort: 'medium', mode: 'auto', deps: ['s4', 's5'], parallel: [],
+      gate: ['No known crash bugs',
+             'Perf budget met on both machines',
+             'Lighthouse performance 80 or better',
+             'Live URL works in Chrome, Edge and Firefox',
+             'Release notes written, v0.1.0 tagged'] },
+  ];
+  const STATUS_LABEL = { pending: 'Pending', in_progress: 'In progress', blocked: 'Blocked', done: 'Done' };
+  const TOTAL_GATES = STAGES.reduce((a, s) => a + s.gate.length, 0);
+
+  // ---- State -----------------------------------------------------------
+  const state = Object.fromEntries(STAGES.map(s => [s.id, { status: 'pending', gate: {}, branch: '', notes: '' }]));
+  let logEntries = [];
+  let db = null, canWrite = null, loaded = false;
+  const writeChain = new Map();          // docPath -> promise, one write at a time per doc
+  const noteTimers = new Map();
+
+  const $ = (sel, el = document) => el.querySelector(sel);
+  const el = (tag, attrs = {}, ...kids) => {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') n.className = v; else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+    }
+    for (const k of kids) if (k != null) n.append(k);
+    return n;
+  };
+  const fmt = iso => { try { return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }); } catch { return iso; } };
+
+  // ---- Derived ---------------------------------------------------------
+  const isDone = id => state[id].status === 'done';
+  const isReady = s => state[s.id].status === 'pending' && s.deps.every(isDone);
+  const gateCount = s => s.gate.filter((_, i) => state[s.id].gate[i]).length;
+
+  // ---- Rendering -------------------------------------------------------
+  const main = $('#stages');
+  const cards = new Map();
+
+  function buildCard(s) {
+    const st = state[s.id];
+    const d = el('details', { class: 'stage', 'data-status': st.status, id: 'stage-' + s.n });
+    if (s.n === 0) d.open = true;
+
+    const pill = el('span', { class: 'pill ' + st.status, text: STATUS_LABEL[st.status] });
+    const summary = el('summary', {},
+      el('span', { class: 'num', text: String(s.n) }),
+      el('span', { class: 'ttl' }, el('h3', { text: s.name }), el('span', { class: 'role', text: s.role + ' · ' + gateCount(s) + '/' + s.gate.length + ' gate items' })),
+      pill);
+
+    const meta = el('div', { class: 'meta' },
+      el('div', {}, el('b', { text: 'Model' }), document.createTextNode(s.model)),
+      el('div', {}, el('b', { text: 'Effort' }), document.createTextNode(s.effort)),
+      el('div', {}, el('b', { text: 'Mode' }), document.createTextNode(s.mode)),
+      el('div', {}, el('b', { text: 'Depends on' }), document.createTextNode(s.deps.length ? s.deps.map(x => 'Stage ' + x.slice(1)).join(', ') : 'nothing')),
+      el('div', {}, el('b', { text: 'Parallel with' }), document.createTextNode(s.parallel.length ? s.parallel.map(x => 'Stage ' + x.slice(1)).join(', ') : 'nothing')),
+      el('div', {}, el('b', { text: 'Brief' }), el('code', { text: s.brief })));
+
+    const sel = el('select', { id: 'status-' + s.id, 'aria-label': 'Status of stage ' + s.n, onchange: e => setStatus(s, e.target.value) });
+    for (const [v, l] of Object.entries(STATUS_LABEL)) sel.append(el('option', { value: v, text: l }));
+    sel.value = st.status;
+    const branch = el('input', { type: 'text', id: 'branch-' + s.id, placeholder: 'branch, e.g. stage-' + s.n + '-…', 'aria-label': 'Branch for stage ' + s.n,
+      onchange: e => save(s.id, { branch: e.target.value.trim() }) });
+    branch.value = st.branch;
+    const row = el('div', { class: 'row' },
+      el('label', { class: 'inl' }, document.createTextNode('Status'), sel),
+      el('label', { class: 'inl', style: 'flex:1 1 220px' }, document.createTextNode('Branch'), branch));
+
+    const gate = el('div', { class: 'gate' }, el('h2', { text: 'Gate ' + s.n + ' checklist' }));
+    s.gate.forEach((txt, i) => {
+      const cb = el('input', { type: 'checkbox', id: 'g-' + s.id + '-' + i, onchange: e => tickGate(s, i, e.target.checked) });
+      cb.checked = !!st.gate[i];
+      gate.append(el('label', { class: cb.checked ? 'ok' : '' }, cb, document.createTextNode(txt)));
+    });
+
+    const notes = el('textarea', { id: 'notes-' + s.id, placeholder: 'Notes for this stage: blockers, decisions, what the report said.', 'aria-label': 'Notes for stage ' + s.n,
+      oninput: e => queueNotes(s.id, e.target.value), onblur: e => flushNotes(s.id, e.target.value) });
+    notes.value = st.notes;
+
+    const dates = el('p', { class: 'dates' });
+    const actions = el('div', { class: 'row' },
+      el('button', { class: 'btn ghost', type: 'button', onclick: () => { s.gate.forEach((_, i) => { state[s.id].gate[i] = true; }); save(s.id, { gate: { ...state[s.id].gate } }, 'Gate ' + s.n + ': all items ticked'); } }, 'Tick all gate items'),
+      el('button', { class: 'btn', type: 'button', onclick: () => setStatus(s, 'done') }, 'Mark stage done'));
+
+    d.append(summary, el('div', { class: 'body' }, meta, row, gate, el('div', {}, el('h2', { text: 'Notes' }), notes), dates, actions));
+    cards.set(s.id, { d, pill, summary, sel, branch, gate, notes, dates });
+    return d;
+  }
+
+  function refreshCard(s) {
+    const c = cards.get(s.id); if (!c) return;
+    const st = state[s.id];
+    c.d.dataset.status = st.status;
+    c.pill.className = 'pill ' + st.status; c.pill.textContent = STATUS_LABEL[st.status];
+    c.summary.querySelector('.role').textContent = s.role + ' · ' + gateCount(s) + '/' + s.gate.length + ' gate items' + (isReady(s) ? ' · ready to start' : '');
+    if (c.sel.value !== st.status) c.sel.value = st.status;
+    if (document.activeElement !== c.branch && c.branch.value !== st.branch) c.branch.value = st.branch;
+    if (document.activeElement !== c.notes && c.notes.value !== st.notes) c.notes.value = st.notes;
+    c.gate.querySelectorAll('input').forEach((cb, i) => { cb.checked = !!st.gate[i]; cb.parentElement.className = cb.checked ? 'ok' : ''; });
+    const parts = [];
+    if (st.startedAt) parts.push('Started ' + fmt(st.startedAt));
+    if (st.doneAt) parts.push('Done ' + fmt(st.doneAt));
+    if (st.updatedAt) parts.push('Updated ' + fmt(st.updatedAt));
+    c.dates.textContent = parts.join(' · ');
+  }
+
+  function renderAll() {
+    STAGES.forEach(refreshCard);
+    const done = STAGES.filter(s => isDone(s.id)).length;
+    const gates = STAGES.reduce((a, s) => a + gateCount(s), 0);
+    $('#m-stages').textContent = done + ' / ' + STAGES.length;
+    $('#m-gates').textContent = gates + ' / ' + TOTAL_GATES;
+    $('#b-stages').style.width = (100 * done / STAGES.length) + '%';
+    $('#b-gates').style.width = (100 * gates / TOTAL_GATES) + '%';
+    renderNext();
+    renderLog();
+  }
+
+  function renderNext() {
+    const box = $('#next'); box.textContent = '';
+    const running = STAGES.filter(s => state[s.id].status === 'in_progress');
+    const blocked = STAGES.filter(s => state[s.id].status === 'blocked');
+    const ready = STAGES.filter(isReady);
+    if (STAGES.every(s => isDone(s.id))) {
+      box.append(el('div', { class: 'item' }, el('b', { text: 'Shipped' }), document.createTextNode('All seven stages are done. v0.1 is out. Open docs/04-roadmap.md and pick the next batch.')));
+      return;
+    }
+    for (const s of blocked) box.append(el('div', { class: 'item blk' }, el('b', { text: 'Blocked' }), document.createTextNode('Stage ' + s.n + ' ' + s.name + '. Read the blocker in docs/status/STATUS.md and clear it before anything else.')));
+    for (const s of running) box.append(el('div', { class: 'item run' }, el('b', { text: 'Running' }), document.createTextNode('Stage ' + s.n + ' ' + s.name + ' (' + s.model + ', ' + s.effort + '). When its report lands, run Gate ' + s.n + ' and tick the items above.')));
+    for (const s of ready) box.append(el('div', { class: 'item' }, el('b', { text: 'Ready to start' }), document.createTextNode('Stage ' + s.n + ' ' + s.name + '. New session, ' + s.model + ', effort ' + s.effort + ', mode ' + s.mode + '. Paste the kickoff prompt from ' + s.brief + '.')));
+    if (!running.length && !ready.length && !blocked.length) {
+      const waiting = STAGES.filter(s => state[s.id].status === 'pending');
+      box.append(el('div', { class: 'item' }, el('b', { text: 'Waiting' }), document.createTextNode('Nothing is ready: ' + waiting.map(s => 'Stage ' + s.n).join(', ') + ' wait on unfinished dependencies. Mark finished stages done so they unlock.')));
+    }
+  }
+
+  function renderLog() {
+    const box = $('#log'); box.textContent = '';
+    if (!logEntries.length) { box.append(el('div', { text: 'No activity yet.' })); return; }
+    for (const e of [...logEntries].reverse().slice(0, 100)) box.append(el('div', {}, el('time', { text: fmt(e.t) }), document.createTextNode(e.text)));
+  }
+
+  // ---- Writes ----------------------------------------------------------
+  function now() { return new Date().toISOString(); }
+
+  function enqueue(path, fn) {
+    const prev = writeChain.get(path) || Promise.resolve();
+    const next = prev.catch(() => {}).then(fn);
+    writeChain.set(path, next);
+    return next;
+  }
+
+  async function save(id, patch, logText) {
+    Object.assign(state[id], patch, { updatedAt: now() });
+    renderAll();
+    if (!db || canWrite === false) return;
+    const body = { ...state[id] };
+    try {
+      await enqueue('stages/' + id, () => db.doc('stages/' + id).set(body));
+      if (logText) appendLog(logText);
+    } catch (e) {
+      if (e && e.code === 'invalid_argument') { canWrite = false; setReadOnly('You can view this board but not change it. Ask the owner for Contributor access.'); }
+      else showNotice('Could not save that change (' + (e && e.code || 'error') + '). It is still shown here; reload to check what was kept.', true);
+    }
+  }
+
+  function setStatus(s, status) {
+    const prev = state[s.id].status;
+    if (prev === status) return;
+    const patch = { status };
+    if (status === 'in_progress' && !state[s.id].startedAt) patch.startedAt = now();
+    if (status === 'done') patch.doneAt = now();
+    save(s.id, patch, 'Stage ' + s.n + ' ' + s.name + ': ' + STATUS_LABEL[prev] + ' → ' + STATUS_LABEL[status]);
+  }
+
+  function tickGate(s, i, checked) {
+    const gate = { ...state[s.id].gate, [i]: checked };
+    const all = s.gate.every((_, k) => gate[k]);
+    save(s.id, { gate }, all ? 'Gate ' + s.n + ': all items verified' : null);
+  }
+
+  function queueNotes(id, value) {
+    state[id].notes = value;
+    clearTimeout(noteTimers.get(id));
+    noteTimers.set(id, setTimeout(() => flushNotes(id, value), 900));
+  }
+  function flushNotes(id, value) {
+    clearTimeout(noteTimers.get(id));
+    if (lastSavedNotes.get(id) === value) return;
+    lastSavedNotes.set(id, value);
+    save(id, { notes: value });
+  }
+  const lastSavedNotes = new Map();
+
+  async function appendLog(text) {
+    if (!db || canWrite === false) return;
+    const entry = { t: now(), text };
+    logEntries = [...logEntries, entry].slice(-200);
+    renderLog();
+    try { await enqueue('meta/log', () => db.doc('meta/log').set({ entries: logEntries })); } catch { /* the stage write already succeeded; the log is best-effort */ }
+  }
+
+  // ---- Notices ---------------------------------------------------------
+  function showNotice(text, warn) { const n = $('#notice'); n.textContent = text; n.className = 'notice' + (warn ? ' warn' : ''); n.hidden = false; }
+  function hideNotice() { $('#notice').hidden = true; }
+  function setReadOnly(text) { document.body.classList.add('readonly'); showNotice(text, false); }
+
+  // ---- Boot ------------------------------------------------------------
+  for (const s of STAGES) main.append(buildCard(s));
+  const tb = $('#settings tbody');
+  for (const s of STAGES) tb.append(el('tr', {}, el('td', { text: String(s.n) }), el('td', { text: s.model }), el('td', { text: s.effort }), el('td', { text: s.mode })));
+  renderAll();
+  showNotice('Connecting to the shared progress store…', false);
+
+  (async () => {
+    const [d, u] = await Promise.all([
+      window.claude && window.claude.use ? window.claude.use('db') : Promise.resolve(null),
+      window.claude && window.claude.use ? window.claude.use('user') : Promise.resolve(null),
+    ]);
+    if (!d) { setReadOnly('Progress is not reachable from this view (sign in to claude.ai and open the artifact there to update it). The plan below is still accurate.'); return; }
+    db = d;
+    try { canWrite = u ? await u.can('data.write') : null; } catch { canWrite = null; }
+    if (canWrite === false) setReadOnly('You can view this board but not change it. Ask the owner for Contributor access.');
+    else hideNotice();
+
+    const timer = setTimeout(() => { if (!loaded) showNotice('The progress store has not answered yet. What you see may be out of date.', true); }, 10000);
+    db.collection('stages').onSnapshot(snap => {
+      for (const doc of snap.docs) {
+        if (!state[doc.id]) continue;
+        const data = doc.data() || {};
+        state[doc.id] = { status: 'pending', gate: {}, branch: '', notes: '', ...data, gate: { ...(data.gate || {}) } };
+        lastSavedNotes.set(doc.id, state[doc.id].notes);
+      }
+      if (!snap.metadata.fromCache && !loaded) { loaded = true; clearTimeout(timer); if (canWrite !== false) hideNotice(); }
+      renderAll();
+    }, err => { clearTimeout(timer); showNotice('Lost the connection to the progress store (' + err.code + '). Reload to reconnect.', true); });
+    db.doc('meta/log').onSnapshot(snap => { const d2 = snap.data(); logEntries = Array.isArray(d2 && d2.entries) ? d2.entries : []; renderLog(); }, () => {});
+  })();
+})();
+</script>

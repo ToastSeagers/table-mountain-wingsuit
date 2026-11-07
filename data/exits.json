@@ -1,0 +1,46 @@
+{
+  "_comment": "Launch points. Positions are given here as lat/lon/elevation for authoring; Stage 0's ExitRegistry converts to world metres at load. Stage 1 snaps these to the DEM; Stage 4 refines by flying. Fictional placements on real geography; see docs/design/exits.md.",
+  "version": 1,
+  "exits": [
+    {
+      "id": "the-table",
+      "name": "The Table",
+      "subtitle": "Western edge",
+      "latLon": { "lat": -33.9585, "lon": 18.4010 },
+      "elevationM": 1050,
+      "headingDeg": 265,
+      "difficulty": 1,
+      "recommendedLandingZones": ["camps-bay-beach", "the-glen"],
+      "unlock": { "type": "always" },
+      "intro": { "cameraPath": [], "durationS": 7 },
+      "blurb": "The classic. Step off the top of the Table and chase the sun down to Camps Bay."
+    },
+    {
+      "id": "platteklip",
+      "name": "Platteklip",
+      "subtitle": "North face",
+      "latLon": { "lat": -33.9605, "lon": 18.4090 },
+      "elevationM": 1070,
+      "headingDeg": 350,
+      "difficulty": 3,
+      "recommendedLandingZones": ["upper-orange", "uct-fields", "tafelberg-road"],
+      "unlock": { "type": "completed", "exitId": "the-table" },
+      "intro": { "cameraPath": [], "durationS": 7 },
+      "blurb": "Down the front of the mountain with the whole city in your lap. Pick your field early."
+    },
+    {
+      "id": "lions-head",
+      "name": "Lion's Head",
+      "subtitle": "Summit",
+      "latLon": { "lat": -33.9353, "lon": 18.3890 },
+      "elevationM": 669,
+      "headingDeg": 300,
+      "altHeadings": [{ "label": "Sea Point", "headingDeg": 300 }, { "label": "Clifton", "headingDeg": 240 }],
+      "difficulty": 2,
+      "recommendedLandingZones": ["sea-point-prom", "clifton"],
+      "unlock": { "type": "completed", "exitId": "the-table" },
+      "intro": { "cameraPath": [], "durationS": 6 },
+      "blurb": "Low, fast and short. There is not much mountain, so use all of it."
+    }
+  ]
+}

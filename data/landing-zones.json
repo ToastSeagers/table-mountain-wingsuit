@@ -1,0 +1,13 @@
+{
+  "_comment": "Landing zones. Real public open spaces from the local paragliding site guide. Positions approximate; Stage 1 refines on imagery.",
+  "version": 1,
+  "zones": [
+    { "id": "camps-bay-beach", "name": "Camps Bay Beach",            "latLon": { "lat": -33.9510, "lon": 18.3775 }, "radiusM": 120, "surface": "sand",   "difficulty": 1 },
+    { "id": "the-glen",        "name": "The Glen Country Club",      "latLon": { "lat": -33.9437, "lon": 18.3800 }, "radiusM": 60,  "surface": "grass",  "difficulty": 2 },
+    { "id": "clifton",         "name": "Clifton Fourth Beach",       "latLon": { "lat": -33.9400, "lon": 18.3760 }, "radiusM": 50,  "surface": "sand",   "difficulty": 2 },
+    { "id": "sea-point-prom",  "name": "Sea Point Promenade lawns",  "latLon": { "lat": -33.9125, "lon": 18.3900 }, "radiusM": 70,  "surface": "grass",  "difficulty": 2 },
+    { "id": "upper-orange",    "name": "Upper Orange Road field",    "latLon": { "lat": -33.9385, "lon": 18.4140 }, "radiusM": 55,  "surface": "grass",  "difficulty": 3 },
+    { "id": "uct-fields",      "name": "UCT sports fields",          "latLon": { "lat": -33.9570, "lon": 18.4640 }, "radiusM": 90,  "surface": "grass",  "difficulty": 2 },
+    { "id": "tafelberg-road",  "name": "Tafelberg Road verge",       "latLon": { "lat": -33.9530, "lon": 18.4120 }, "radiusM": 40,  "surface": "tarmac", "difficulty": 3 }
+  ]
+}
