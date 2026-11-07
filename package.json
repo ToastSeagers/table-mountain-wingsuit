@@ -9,18 +9,21 @@
     "preview": "vite preview",
     "test": "vitest run",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "format": "prettier --write ."
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tools.json",
+    "format": "prettier --write .",
+    "harness": "tsx tools/flight-harness.ts"
   },
   "dependencies": {
     "three": "0.187.0"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",
+    "@types/node": "26.6.6",
     "@types/three": "0.187.0",
     "eslint": "9.39.5",
     "globals": "17.14.0",
     "prettier": "3.9.10",
+    "tsx": "4.23.15",
     "typescript": "5.9.3",
     "typescript-eslint": "8.72.1",
     "vite": "6.4.5",

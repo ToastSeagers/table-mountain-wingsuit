@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "types": ["node"] },
+  "include": ["tools/*.ts", "tools/scenarios/*.ts", "src/flight/**/*.ts", "src/types/**/*.ts"]
+}
