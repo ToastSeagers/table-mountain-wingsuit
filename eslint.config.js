@@ -3,7 +3,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist', 'node_modules', 'public', 'tools/terrain/cache'] },
+  { ignores: ['dist', 'node_modules', 'public', 'tools/terrain/cache', '.claude'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

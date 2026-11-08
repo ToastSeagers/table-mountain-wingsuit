@@ -85,6 +85,7 @@ export class TileLoader {
   private texturesFetched = 0;
   private texturesAborted = 0;
   private bytesFetched = 0;
+  private pumpScheduled = false;
 
   constructor(
     readonly meta: TerrainMeta,
@@ -210,8 +211,21 @@ export class TileLoader {
       reject,
     };
     this.jobs.set(key, job as Job<unknown>);
-    this.pump();
+    this.schedulePump();
     return promise;
+  }
+
+  /**
+   * Starts work on the next microtask, so a batch of requests made in one go (all heights, a
+   * frame's texture set) is ordered by priority before any of it starts.
+   */
+  private schedulePump(): void {
+    if (this.pumpScheduled) return;
+    this.pumpScheduled = true;
+    queueMicrotask(() => {
+      this.pumpScheduled = false;
+      this.pump();
+    });
   }
 
   private pump(): void {
