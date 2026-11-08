@@ -80,6 +80,35 @@ r/vibecoding welcomes vibe-coded projects but removes link drops: the post must 
 >
 > Feedback button is on the results screen; it fills in your device and frame rate itself. Tell me what feels wrong.
 
+### r/playmygame version
+
+Rules: free playable build now, link flair, title "Game Title, one-line hook", first person, say platform and length, give a specific ask, one post a month.
+
+Title: *Table Mountain Wingsuit, fly a wingsuit off the real Table Mountain in your browser (free, 2-minute runs, phone or desktop)*
+
+> I made this one. It is a wingsuit game on the real Table Mountain in Cape Town, built from the city's open LiDAR terrain and aerial photos. Three launch points, pull a parachute, hit a landing zone, retro score screen. A run is about two minutes.
+>
+> Play free in the browser, nothing to install: https://toastseagers.github.io/table-mountain-wingsuit/
+> Desktop: arrow keys or WASD, mouse, or a gamepad. Phone: drag to steer, buttons for pull and flare.
+>
+> Disclosure: the code was written by an AI (Claude Code) with me directing and testing. The terrain is real open data, the sound is synthesised, no asset packs, and the code is MIT on GitHub.
+>
+> What I want to know: does it feel like flying or like steering a brick, do the phone controls make sense without a tutorial, and does it run smoothly on your machine. There is a FEEDBACK button on the results screen that fills in your device details for you, or reply here. I will play and comment on yours too.
+
+### r/SideProject version
+
+Rule: title "[Project name] - [Short description]".
+
+Title: *Table Mountain Wingsuit - a free browser wingsuit game on real Cape Town terrain, built with an AI coding agent*
+
+> Side project of the last few days. I live near Table Mountain and wanted to fly off it without the legal and mortal problems, so: a browser wingsuit game on the real terrain. City of Cape Town publishes 2 m LiDAR contours and aerial imagery as open data; a Python pipeline turns that into height tiles, Three.js draws it, and a small physics model flies a suit at a realistic 3:1 glide.
+>
+> https://toastseagers.github.io/table-mountain-wingsuit/ (free, no account, works on a phone)
+>
+> Honest part: Claude Code wrote the code. I wrote the plan, split it into stages with their own briefs and checks, tested every build, and made the decisions. Took about a week of evenings and a few hundred tests. Repo is MIT if you want to see how a multi-agent build like that is organised: https://github.com/ToastSeagers/table-mountain-wingsuit
+>
+> Looking for feedback on feel and on phone performance. The FEEDBACK button on the results screen prefills your device and frame rate so I can compare across hardware.
+
 Notes for the owner when posting:
 
 - Check each subreddit's rules on AI-generated content before posting; a removal is worse than not posting. Use an "AI-assisted" flair where one exists.
