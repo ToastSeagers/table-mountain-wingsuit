@@ -4,7 +4,7 @@ import {
   Frustum,
   Group,
   Matrix4,
-  type PerspectiveCamera,
+  PerspectiveCamera,
   type Texture,
   type WebGLRenderer,
 } from 'three';
@@ -15,10 +15,12 @@ import type { WorldUniforms } from '../WorldUniforms';
 import { buildChunkGeometry } from './ChunkGeometry';
 import { HeightTexture } from './HeightTexture';
 import { HeightTileStore } from './HeightTileStore';
-import { chunkPlacement, MAX_TEXTURED_LOD, TerrainChunk } from './TerrainChunk';
+import { chunkPlacement, chunkTextureSlots, MAX_TEXTURED_LOD, TerrainChunk } from './TerrainChunk';
+import { DEFAULT_GEOMETRY_BUILDS_PER_FRAME, DEFAULT_TEXTURE_UPLOADS_PER_FRAME } from '../WorldSettings';
 import { createTerrainSharedUniforms, type TerrainSharedUniforms } from './TerrainMaterial';
 import { rectDistance, type TerrainMeta } from './TerrainMeta';
 import { MAX_LOD, type QuadNode, TerrainQuadtree, TRIANGLES_PER_CHUNK } from './TerrainQuadtree';
+import { streamingBudgets } from './StreamingBudgets';
 import { TerrainTextureCache } from './TerrainTextureCache';
 import {
   type FetchLike,
@@ -29,12 +31,8 @@ import {
   TileLoader,
 } from './TileLoader';
 
-/** Chunk geometries built per frame at most (about 0.1 ms each) once something is on screen. */
-export const GEOMETRY_BUILDS_PER_FRAME = 12;
 /** Built geometries kept for reuse when the LOD flips back. */
 export const GEOMETRY_CACHE_SIZE = 160;
-/** Time slice per frame for measuring node errors as height tiles arrive. */
-export const MEASURE_BUDGET_MS = 2;
 /** Texture tiles within this distance of the camera stay wanted even when off screen. */
 export const TEXTURE_RING_M = 1200;
 /** Camera AGL range over which the detail blend fades out (look spec: strong on the deck, gone at the exit). */
@@ -48,7 +46,16 @@ export interface TerrainOptions {
   maxResidentTextureTiles: number;
   lodErrorPx: number;
   maxTerrainTriangles: number;
+  /** Flight budgets (WorldSettings); desktop defaults when omitted. */
+  geometryBuildsPerFrame?: number;
+  textureUploadsPerFrame?: number;
   fetch?: FetchLike;
+}
+
+/** A camera placement the countdown warms up beyond the live camera: where the flight will be in a few seconds. */
+export interface WarmPose {
+  position: Vec3;
+  target: Vec3;
 }
 
 export interface TerrainStats {
@@ -62,6 +69,10 @@ export interface TerrainStats {
   texturesTotal: number;
   texturesEvicted: number;
   geometryBuildsThisFrame: number;
+  /** Chunk geometries built since the terrain was created (a flight with no churn adds none after the warm-up). */
+  geometryBuildsTotal: number;
+  /** The warm-up queues (builds, measurements, uploads) are empty. */
+  settled: boolean;
   pendingMeasurements: number;
   requestsQueued: number;
   mbFetched: number;
@@ -86,6 +97,9 @@ export class Terrain {
   readonly heightTexture: HeightTexture;
   lodErrorPx: number;
   maxTerrainTriangles: number;
+  /** Flight budgets; the countdown warm-up overrides them (see StreamingBudgets). */
+  geometryBuildsPerFrame: number;
+  textureUploadsPerFrame: number;
   private readonly shared: TerrainSharedUniforms;
   private readonly placeholder: DataTexture;
   private readonly detail: DataTexture;
@@ -100,6 +114,13 @@ export class Terrain {
   private drawn: QuadNode[] = [];
   private frame = 0;
   private builds = 0;
+  private buildsTotal = 0;
+  private buildBacklog = 0;
+  private settled = false;
+  private warming = false;
+  private warmPoses: WarmPose[] = [];
+  private readonly warmCams: PerspectiveCamera[] = [];
+  private readonly warmWanted = new Map<number, number>();
   private shadows = false;
   private readonly frustum = new Frustum();
   private readonly m4 = new Matrix4();
@@ -116,6 +137,8 @@ export class Terrain {
   ) {
     this.lodErrorPx = opts.lodErrorPx;
     this.maxTerrainTriangles = opts.maxTerrainTriangles;
+    this.geometryBuildsPerFrame = opts.geometryBuildsPerFrame ?? DEFAULT_GEOMETRY_BUILDS_PER_FRAME;
+    this.textureUploadsPerFrame = opts.textureUploadsPerFrame ?? DEFAULT_TEXTURE_UPLOADS_PER_FRAME;
     this.sampler = new TerrainSamplerImpl(store, (col, row) => void loader.requestHeight(col, row, PRIORITY_URGENT));
     this.quadtree = new TerrainQuadtree(store);
     this.heightTexture = new HeightTexture(store);
@@ -164,6 +187,8 @@ export class Terrain {
       texturesTotal: this.meta.textureTileCount,
       texturesEvicted: ts.evicted,
       geometryBuildsThisFrame: this.builds,
+      geometryBuildsTotal: this.buildsTotal,
+      settled: this.settled,
       pendingMeasurements: this.quadtree.pendingMeasurements,
       requestsQueued: ls.queued + ls.running,
       mbFetched: ls.bytesFetched / 1e6,
@@ -178,6 +203,35 @@ export class Terrain {
 
   setMaxResidentTextures(n: number): void {
     this.textures.maxResident = n;
+  }
+
+  /**
+   * Countdown warm-up: from now until `endWarmup()` the streaming budgets are lifted, and the chunks
+   * and texture tiles the flight will want from each of `poses` (as well as from the live camera)
+   * are built and uploaded. `isSettled()` turns true once all of it has drained.
+   */
+  beginWarmup(poses: readonly WarmPose[]): void {
+    this.warming = true;
+    this.warmPoses = [...poses];
+    this.settled = false;
+  }
+
+  endWarmup(): void {
+    this.warming = false;
+    this.warmPoses = [];
+    this.warmWanted.clear();
+  }
+
+  /** Nothing is left queued: the selected chunks are built, node errors measured, height and texture uploads done. */
+  isSettled(): boolean {
+    return this.settled;
+  }
+
+  /** Lets the preload's pinned texture tiles age out like any other (called when the flight starts). */
+  releasePreload(): void {
+    this.textures.unpin(this.preloadPins);
+    this.textures.unpinAll();
+    this.preloadPins = [];
   }
 
   setShadows(on: boolean): void {
@@ -216,8 +270,10 @@ export class Terrain {
     this.frame++;
     this.builds = 0;
     const renderer = this.renderer;
+    const budgets = streamingBudgets(this.warming, this.geometryBuildsPerFrame, this.textureUploadsPerFrame);
+    this.textures.uploadsPerFrame = budgets.uploadsPerFrame;
     this.heightTexture.upload(renderer);
-    this.quadtree.processDirty(MEASURE_BUDGET_MS);
+    this.quadtree.processDirty(budgets.measureMs);
     const cam = camera.position;
     this.loader.setFocus(cam.x, cam.z);
     this.agl = cam.y - this.sampler.peekHeight(cam.x, cam.z);
@@ -227,19 +283,27 @@ export class Terrain {
     this.m4.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.frustum.setFromProjectionMatrix(this.m4, camera.coordinateSystem, camera.reversedDepth);
     const heightPx = renderer.domElement.height || 1080;
+    const pxPerUnitAtDistance = heightPx / (2 * Math.tan((camera.fov * Math.PI) / 360));
+    const maxChunks = Math.floor(this.maxTerrainTriangles / TRIANGLES_PER_CHUNK);
     const nodes = this.quadtree.select({
       camX: cam.x,
       camY: cam.y,
       camZ: cam.z,
-      pxPerUnitAtDistance: heightPx / (2 * Math.tan((camera.fov * Math.PI) / 360)),
+      pxPerUnitAtDistance,
       errorPx: this.lodErrorPx,
-      maxChunks: Math.floor(this.maxTerrainTriangles / TRIANGLES_PER_CHUNK),
+      maxChunks,
       frustum: this.frustum,
     });
-    this.drawn = this.ensureGeometry(nodes);
+    const warm = this.warming ? this.selectWarm(camera, nodes, pxPerUnitAtDistance, maxChunks) : [];
+    this.drawn = this.ensureGeometry(nodes, warm, budgets.buildsPerFrame);
     this.syncChunks();
     this.updateTextures(cam.x, cam.z, nowS);
-    this.trimGeometryCache();
+    this.trimGeometryCache(warm);
+    this.settled =
+      this.buildBacklog === 0 &&
+      this.quadtree.pendingMeasurements === 0 &&
+      this.heightTexture.pendingUploads === 0 &&
+      this.textures.isIdle();
   }
 
   dispose(): void {
@@ -252,20 +316,79 @@ export class Terrain {
     this.placeholder.dispose();
   }
 
-  /** Builds missing geometry; if too much is missing, keeps the previous selection one more frame. */
-  private ensureGeometry(nodes: QuadNode[]): QuadNode[] {
-    const missing = nodes.filter((n) => {
+  /**
+   * Selects what each warm-up pose would draw (same LOD rules as the live camera) and returns the
+   * nodes the live selection does not already hold. Their texture tiles go into `warmWanted`.
+   */
+  private selectWarm(camera: PerspectiveCamera, live: QuadNode[], pxPerUnitAtDistance: number, maxChunks: number): QuadNode[] {
+    const have = new Set(live.map((n) => n.id));
+    const out: QuadNode[] = [];
+    this.warmWanted.clear();
+    const meta = this.meta;
+    this.warmPoses.forEach((pose, i) => {
+      const cam = (this.warmCams[i] ??= new PerspectiveCamera());
+      cam.projectionMatrix.copy(camera.projectionMatrix);
+      cam.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
+      cam.position.set(pose.position.x, pose.position.y, pose.position.z);
+      cam.up.set(0, 1, 0);
+      cam.lookAt(pose.target.x, pose.target.y, pose.target.z);
+      cam.updateMatrixWorld();
+      this.m4.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+      this.frustum.setFromProjectionMatrix(this.m4, camera.coordinateSystem, camera.reversedDepth);
+      const nodes = this.quadtree.select({
+        camX: pose.position.x,
+        camY: pose.position.y,
+        camZ: pose.position.z,
+        pxPerUnitAtDistance,
+        errorPx: this.lodErrorPx,
+        maxChunks,
+        frustum: this.frustum,
+      });
+      for (const n of nodes) {
+        if (n.lod <= MAX_TEXTURED_LOD) {
+          const p = chunkPlacement(this.quadtree, n);
+          for (const idx of chunkTextureSlots(meta, n.lod, p.originX, p.originZ).slots) {
+            if (idx < 0) continue;
+            const rect = meta.textureTileRect(idx % meta.texCols, Math.floor(idx / meta.texCols));
+            const d = rectDistance(rect, pose.position.x, pose.position.z);
+            const prev = this.warmWanted.get(idx);
+            if (prev === undefined || d < prev) this.warmWanted.set(idx, d);
+          }
+        }
+        if (!have.has(n.id)) {
+          have.add(n.id);
+          out.push(n);
+        }
+      }
+    });
+    return out;
+  }
+
+  /**
+   * Builds missing geometry for the live selection first, then (budget permitting) for the warm-up
+   * poses. If too much of the live selection is missing, keeps the previous selection one more frame.
+   */
+  private ensureGeometry(nodes: QuadNode[], warm: QuadNode[], budget: number): QuadNode[] {
+    const isMissing = (n: QuadNode): boolean => {
       const g = this.geoms.get(n.id);
       return !g || (!g.complete && this.quadtree.nodeDataLoaded(n.lod, n.ix, n.iz));
-    });
-    const buildAll = missing.length <= GEOMETRY_BUILDS_PER_FRAME || this.drawn.length === 0;
-    const toBuild = buildAll ? missing : missing.slice(0, GEOMETRY_BUILDS_PER_FRAME);
+    };
+    const missing = nodes.filter(isMissing);
+    const buildAll = missing.length <= budget || this.drawn.length === 0;
+    const toBuild = buildAll ? missing : missing.slice(0, budget);
     for (const n of toBuild) this.build(n);
+    const left = buildAll ? budget - missing.length : 0;
+    if (left > 0) for (const n of warm.filter(isMissing).slice(0, left)) this.build(n);
     const result = buildAll ? nodes : this.drawn.filter((n) => this.geoms.has(n.id));
-    for (const n of result) {
+    for (const n of [...result, ...warm]) {
       const g = this.geoms.get(n.id);
       if (g) g.lastUsedFrame = this.frame;
     }
+    // Anything selected (live or warm) that is not built and complete is still queued.
+    let backlog = 0;
+    for (const n of nodes) if (!this.geoms.get(n.id)?.complete) backlog++;
+    for (const n of warm) if (!this.geoms.get(n.id)?.complete) backlog++;
+    this.buildBacklog = backlog;
     return result;
   }
 
@@ -279,6 +402,7 @@ export class Terrain {
       lastUsedFrame: this.frame,
     });
     this.builds++;
+    this.buildsTotal++;
   }
 
   private syncChunks(): void {
@@ -324,15 +448,20 @@ export class Terrain {
         wanted.set(idx, PRIORITY_OFFSCREEN_M + rectDistance(meta.textureTileRect(t.col, t.row), camX, camZ));
       }
     }
+    for (const [idx, d] of this.warmWanted) {
+      const cur = wanted.get(idx);
+      if (cur === undefined || d < cur) wanted.set(idx, d);
+    }
     this.textures.update(wanted, this.frame, nowS, this.renderer);
     const get = (i: number): Texture | null => this.textures.get(i);
     const blend = (i: number): number => this.textures.blend(i, nowS);
     for (const chunk of this.active.values()) chunk.updateTextures(get, blend);
   }
 
-  private trimGeometryCache(): void {
+  private trimGeometryCache(warm: QuadNode[]): void {
     if (this.geoms.size <= GEOMETRY_CACHE_SIZE) return;
-    const inUse = new Set(this.drawn.map((n) => n.id));
+    // Warm-up geometry counts as in use, or two poses larger than the cache would rebuild it every frame.
+    const inUse = new Set([...this.drawn, ...warm].map((n) => n.id));
     const old = [...this.geoms.entries()]
       .filter(([id]) => !inUse.has(id))
       .sort((a, b) => a[1].lastUsedFrame - b[1].lastUsedFrame);

@@ -106,6 +106,8 @@ export class World {
         maxResidentTextureTiles: settings.maxResidentTextureTiles,
         lodErrorPx: settings.lodErrorPx,
         maxTerrainTriangles: settings.maxTerrainTriangles,
+        geometryBuildsPerFrame: settings.geometryBuildsPerFrame,
+        textureUploadsPerFrame: settings.textureUploadsPerFrame,
         fetch: opts.fetch,
       },
       opts.focus,
@@ -135,6 +137,8 @@ export class World {
     this.terrain.setMaxResidentTextures(s.maxResidentTextureTiles);
     this.terrain.lodErrorPx = s.lodErrorPx;
     this.terrain.maxTerrainTriangles = s.maxTerrainTriangles;
+    this.terrain.geometryBuildsPerFrame = s.geometryBuildsPerFrame;
+    this.terrain.textureUploadsPerFrame = s.textureUploadsPerFrame;
     this.renderer.toneMappingExposure = s.exposure;
     this.applyPixelRatio();
     const shadow = this.sun.light.shadow;
