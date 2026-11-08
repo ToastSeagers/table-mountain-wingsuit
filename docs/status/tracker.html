@@ -122,7 +122,7 @@
   <header class="top">
     <div>
       <h1>TABLE MOUNTAIN WINGSUIT<br>BUILD TRACKER</h1>
-      <p class="sub">Seven stages, one agent session each. Tick gate items as you verify them, set the status, and the board tells you what to start next. Plan details live in the repo under <code>PLAN.md</code> and <code>docs/</code>.</p>
+      <p class="sub">Seven stages shipped v0.1; Stage 7 opens v0.2. One agent session each. Tick gate items as you verify them, set the status, and the board tells you what to start next. Plan details live in the repo under <code>PLAN.md</code> and <code>docs/</code>.</p>
     </div>
     <div class="meter" aria-live="polite">
       <div class="lbl"><span>STAGES DONE</span><b id="m-stages">0 / 7</b></div>
@@ -161,7 +161,7 @@
     </aside>
   </div>
 
-  <footer>Order of play: 0 → (1 ∥ 3) → 2 → 4 (∥ 5 audio) → 5 → 6. Merge only after the gate passes.</footer>
+  <footer>Order of play: 0 → (1 ∥ 3) → 2 → 4 (∥ 5 audio) → 5 → 6 (v0.1) → 7 (v0.2). Merge only after the gate passes.</footer>
 </div>
 
 <script>
@@ -218,6 +218,15 @@
              'Lighthouse performance 80 or better',
              'Live URL works in Chrome, Edge and Firefox',
              'Release notes written, v0.1.0 tagged'] },
+    { id: 's7', n: 7, name: 'Mobile touch controls (v0.2)', role: 'Mobile Engineer', brief: 'docs/agents/07-mobile.md',
+      model: 'Sonnet 5.5', effort: 'high', mode: 'auto', deps: ['s6'], parallel: [],
+      gate: ['Full touch-only run from title to high score, no console errors',
+             'Drag steer, hold-to-bank, PULL then FLARE, BRAKE, pause, camera all work by touch',
+             'Headline and panels fit at 375 px wide',
+             'Mobile preset auto-selects on touch devices and can be overridden',
+             'No depth or lighting artefacts with float-linear and clip-control forced off',
+             'Owner’s phone: steady frame rate in flight, time to title under 15 s',
+             'Desktop keyboard, mouse, gamepad unchanged at 60 fps'] },
   ];
   const STATUS_LABEL = { pending: 'Pending', in_progress: 'In progress', blocked: 'Blocked', done: 'Done' };
   const TOTAL_GATES = STAGES.reduce((a, s) => a + s.gate.length, 0);
@@ -321,7 +330,7 @@
     STAGES.forEach(refreshCard);
     const done = STAGES.filter(s => isDone(s.id)).length;
     const gates = STAGES.reduce((a, s) => a + gateCount(s), 0);
-    $('#m-stages').textContent = done + ' / ' + STAGES.length;
+    $('#m-stages').textContent = done + ' / ' + STAGES.length + (done >= 7 ? ' · v0.1 shipped' : '');
     $('#m-gates').textContent = gates + ' / ' + TOTAL_GATES;
     $('#b-stages').style.width = (100 * done / STAGES.length) + '%';
     $('#b-gates').style.width = (100 * gates / TOTAL_GATES) + '%';
@@ -335,7 +344,7 @@
     const blocked = STAGES.filter(s => state[s.id].status === 'blocked');
     const ready = STAGES.filter(isReady);
     if (STAGES.every(s => isDone(s.id))) {
-      box.append(el('div', { class: 'item' }, el('b', { text: 'Shipped' }), document.createTextNode('All seven stages are done. v0.1 is out. Open docs/04-roadmap.md and pick the next batch.')));
+      box.append(el('div', { class: 'item' }, el('b', { text: 'Shipped' }), document.createTextNode('Every stage is done. Open docs/04-roadmap.md and pick the next batch.')));
       return;
     }
     for (const s of blocked) box.append(el('div', { class: 'item blk' }, el('b', { text: 'Blocked' }), document.createTextNode('Stage ' + s.n + ' ' + s.name + '. Read the blocker in docs/status/STATUS.md and clear it before anything else.')));

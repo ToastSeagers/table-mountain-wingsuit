@@ -31,3 +31,4 @@ Anything not in `PLAN.md` section 1 lives here. Agents add ideas to the bottom w
 - 
 - Stage 6 follow-ups: reuse PostStack targets across render-scale changes (hitch on entering results); CI step running tests and lint before Pages deploy; terrain-aware autopilot for balance probes; replace the Clifton shader mask with a rebuilt sea mask.
 - v0.2: paint an HTML/CSS title poster before WebGL initialises so Largest Contentful Paint is a DOM element, not the canvas (headless Lighthouse LCP 3.5 to 4.5 s on v0.1).
+- Stage 7 (v0.2) is the mobile stage; brief in docs/agents/07-mobile.md. Tilt steering stays out until the owner asks; the hook is left in place.

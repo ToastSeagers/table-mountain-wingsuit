@@ -183,3 +183,12 @@ Gate 6 checklist
 - [ ] Lighthouse performance 80 or better
 - [ ] Live URL works in Chrome, Edge and Firefox
 - [ ] Release notes written, tag pushed
+
+---
+
+## Stage 7 — Mobile touch controls (v0.2)
+
+**Inputs:** v0.1.0 on `main`. The owner's phone for the real-device check.
+**Outputs:** touch steering (drag virtual stick, hold-to-bank), PULL/FLARE and BRAKE buttons, tappable menus, mobile quality preset, verified renderer fallbacks, responsive type scale, landscape prompt.
+
+The owner's control design, the steps and Gate 7 are in `docs/agents/07-mobile.md`. No tilt in this stage.

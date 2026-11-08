@@ -77,6 +77,7 @@ Model and effort recommendations are chosen to spend credits where judgement mat
 | 5 | Audio, post-FX, replay | `05-audio-postfx.md` | 3 (audio), 4 (FX) | 4 | Sonnet 5.5 | medium | auto |
 | 6 | QA, balance, perf, release | `06-qa-release.md` | 4, 5 | - | Sonnet 5.5 (+ Haiku for sweeps) | medium | auto |
 | - | Orchestrator / gate reviews | `00-orchestrator.md` | - | - | Fable 5.1 or Opus 5.5 | medium | default |
+| 7 | Mobile touch controls (v0.2) | `07-mobile.md` | 6 (v0.1 shipped) | - | Sonnet 5.5 | high | auto |
 
 Stages 1 and 3 can start the same day once Stage 0 is merged. Stage 3 never touches Three.js, so it cannot collide with Stage 1 or 2.
 
@@ -126,6 +127,7 @@ These live in `src/types/` and are created in Stage 0. Changing them requires a 
 5. When Stage 4 passes, merge, let Stage 5 finish the post-FX and replay half.
 6. When Stage 5 passes, merge, start Stage 6 (`06-qa-release.md`). Playtest yourself at this point and write notes into `docs/status/playtest-notes.md`.
 7. Ship v0.1. Open `docs/04-roadmap.md` and pick the next batch.
+8. v0.2 begins with Stage 7, mobile touch controls (`docs/agents/07-mobile.md`): drag or hold to steer, a PULL button, no tilt, a mobile quality preset. Gate 7 is in that brief; the owner's phone is the test device.
 
 After each gate, update the progress tracker artifact (link in `docs/status/STATUS.md`).
 
