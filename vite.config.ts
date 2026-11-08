@@ -20,5 +20,8 @@ export default defineConfig(({ command, isPreview }) => ({
   test: {
     include: ['src/**/*.test.ts'],
     environment: 'node',
+    // The terrain geometry tests take 2 to 4 s each on the reference laptop and about 3x that on a
+    // GitHub-hosted runner, where Vitest's 5 s default made one of them time out (CI run 42512063754).
+    testTimeout: 30_000,
   },
 }));
