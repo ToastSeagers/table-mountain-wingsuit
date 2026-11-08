@@ -82,20 +82,25 @@ r/vibecoding welcomes vibe-coded projects but removes link drops: the post must 
 >
 > Feedback button is on the results screen; it fills in your device and frame rate itself. Tell me what feels wrong.
 
-### r/playmygame version
+### r/playmygame version (their template)
 
-Rules: free playable build now, link flair, title "Game Title, one-line hook", first person, say platform and length, give a specific ask, one post a month.
+Rules: free playable build now, platform flair added after posting, description of at least 100 words, one post a month. Posted title: *Table Mountain Wingsuit, fly a wingsuit off the real Table Mountain in your browser (free)*
 
-Title: *Table Mountain Wingsuit, fly a wingsuit off the real Table Mountain in your browser (free, 2-minute runs, phone or desktop)*
+> **Game Title:** Table Mountain Wingsuit
+>
+> **Playable Link:** https://toastseagers.github.io/table-mountain-wingsuit/
+>
+> **Platform:** Browser (desktop and mobile)
+>
+> **Description:** A wingsuit flying game set on the real Table Mountain in Cape Town. The terrain is built from the City of Cape Town's open 2 m LiDAR data and 2025 aerial photography, so the cliffs, gorges and beaches are the actual ones. You pick one of three launch points (The Table, Platteklip Gorge or Lion's Head), fly a wingsuit with a realistic 3:1 glide, pull your parachute, flare, and try to put down inside a landing zone at Camps Bay, the Glen or Sea Point. Scoring is retro arcade style: distance, air time, proximity to terrain, landing quality and style bonuses, with a high-score table and initials. A run takes about two minutes. Keyboard, mouse or gamepad on desktop; on a phone you drag to steer and tap buttons to pull and flare. The sound is synthesised, there are no accounts, ads or tracking, and the launch points are fictional placements on real geography.
+>
+> **Free to Play Status:** Free to play
+>
+> **Involvement:** Solo project. I designed it, wrote the plan and specs, chose and prepared the open terrain data, playtested every build on desktop and phone, and made the design and tuning calls. The code itself was written by an AI coding agent (Claude Code) working from my briefs, stage by stage, with me checking each one before it went in. Code is MIT on GitHub.
+>
+> What I would most like feedback on: does flying feel good, do the phone controls make sense without a tutorial, and does it run smoothly on your hardware. The FEEDBACK button on the results screen fills in your device and frame rate for you. I will play and comment on your games too.
 
-> I made this one. It is a wingsuit game on the real Table Mountain in Cape Town, built from the city's open LiDAR terrain and aerial photos. Three launch points, pull a parachute, hit a landing zone, retro score screen. A run is about two minutes.
->
-> Play free in the browser, nothing to install: https://toastseagers.github.io/table-mountain-wingsuit/
-> Desktop: arrow keys or WASD, mouse, or a gamepad. Phone: drag to steer, buttons for pull and flare.
->
-> Disclosure: the code was written by an AI (Claude Code) with me directing and testing. The terrain is real open data, the sound is synthesised, no asset packs, and the code is MIT on GitHub.
->
-> What I want to know: does it feel like flying or like steering a brick, do the phone controls make sense without a tutorial, and does it run smoothly on your machine. There is a FEEDBACK button on the results screen that fills in your device details for you, or reply here. I will play and comment on yours too.
+Posted 2026-11-08: r/vibecoding https://www.reddit.com/r/vibecoding/comments/1xr1jyf/wingsuit_game_on_real_lidar_terrain_coded_by/ and r/SideProject.
 
 ### r/SideProject version
 
