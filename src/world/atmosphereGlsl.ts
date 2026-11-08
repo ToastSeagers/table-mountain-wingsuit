@@ -84,7 +84,7 @@ vec3 waterShade(vec3 bodyColor, vec3 worldPos) {
   vec3 refl = skyColor(r);
   vec3 hv = normalize(v + uSunDir);
   float nh = max(dot(n, hv), 0.0);
-  float spec = pow(nh, 900.0) * 40.0 + pow(nh, 80.0) * 0.25;
+  float spec = pow(nh, 2400.0) * 9.0 + pow(nh, 120.0) * 0.12;
   vec3 body = bodyColor * (uSkyAmbient * 0.9 + uSunColor * max(uSunDir.y, 0.0) * 0.5);
   return mix(body, refl, fres * 0.85) + uSunColor * spec;
 }
