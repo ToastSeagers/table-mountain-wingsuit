@@ -13,8 +13,8 @@ export interface FeedbackForm {
 }
 
 export const FEEDBACK_FORM: FeedbackForm = {
-  url: '',
-  techEntry: '',
+  url: 'https://docs.google.com/forms/d/e/1FAIpQLSdkuQYWS-0TjyvDp1n5ZK8F32SLRcFujaMprbYFxPNlooYzfA/viewform',
+  techEntry: '2086699247',
 };
 
 export interface FeedbackContext {
@@ -81,9 +81,24 @@ export function describeBrowser(ua: string): string {
   return `${name} ${os}`;
 }
 
-/** One line a tester never has to edit, e.g. `v0.2.0-alpha.2 | phone | Mali-G78 | Chrome 142 Android | 838x328 @1.0 | mobile | the-table 6,767 landed 58 fps`. */
+/**
+ * The GPU name without the ANGLE wrapper, device ids and Direct3D tail, e.g.
+ * `ANGLE (NVIDIA, NVIDIA GeForce RTX 4060 Laptop GPU (0x000028A0) Direct3D11 vs_5_0 ps_5_0, D3D11)`
+ * becomes `NVIDIA GeForce RTX 4060 Laptop GPU`.
+ */
+export function shortGpuName(raw: string): string {
+  let s = raw.replace(/^ANGLE \((.*)\)$/, '$1');
+  s = s.replace(/\s*\(0x[0-9A-Fa-f]+\)/g, '');
+  s = s.replace(/\s*Direct3D\d+.*$/, '').replace(/,\s*(D3D\d+|OpenGL.*|Metal.*|Vulkan.*)$/, '');
+  // "NVIDIA, NVIDIA GeForce ..." and "ARM, Mali-G78 ..." carry the vendor twice or as a prefix.
+  const m = /^([^,]+),\s*(.+)$/.exec(s);
+  if (m) s = m[2].startsWith(m[1]) ? m[2] : `${m[1]} ${m[2]}`;
+  return s.trim().slice(0, 60);
+}
+
+/** One line a tester never has to edit, e.g. `v0.2.0-alpha.2 | phone | ARM Mali-G78 MP20 | Chrome 142 Android | 838x328 @1.0 | mobile | the-table 6,767 landed 58 fps`. */
 export function techSummary(c: FeedbackContext): string {
-  const gpu = c.gpu.replace(/^ANGLE \((.*)\)$/, '$1').slice(0, 60);
+  const gpu = shortGpuName(c.gpu);
   const parts = [
     `v${c.version}`,
     c.device,

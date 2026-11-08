@@ -55,7 +55,10 @@ Shorter version for a second group:
 
 ## 5. Form details
 
-- Form (share): _to be filled when the form is created_
-- Edit: _to be filled_
-- Responses sheet: _to be filled_
-- Technical-details entry id: _to be filled_
+Created 2026-11-08 under the owner's personal Google account by running `create-form.gs` in Apps Script (project "TMW feedback form").
+
+- Form (share): https://docs.google.com/forms/d/e/1FAIpQLSdkuQYWS-0TjyvDp1n5ZK8F32SLRcFujaMprbYFxPNlooYzfA/viewform
+- Edit: https://docs.google.com/forms/d/1zlJM8Sd64Kk6JpPykeBbe30_VGLMUscEj-FGioXf704/edit
+- Responses sheet: https://docs.google.com/spreadsheets/d/1wGHgTNQf99P5aZxM0F4bx-KXFhY1OpX8n1cGX1rBq94/edit
+- Technical-details entry id: `2086699247` (read from the live form's `FB_PUBLIC_LOAD_DATA_`; the other entry ids are 1499112870, 1004977346, 2125250359, 17471424, 323025551, 412080196, 1855824864, 928364991, 1751847362 in question order)
+- No sign-in required to answer; email is not collected; multiple responses per person allowed.

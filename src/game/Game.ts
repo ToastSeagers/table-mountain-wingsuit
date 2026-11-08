@@ -120,6 +120,8 @@ export class Game {
   /** Rendered frames and wall seconds while flying unpaused: the mean fps reported in tester feedback. */
   private flightFrames = 0;
   private flightSeconds = 0;
+  /** Canvas size and pixel ratio while flying; the results screen renders at a different scale. */
+  private flightCanvas: { w: number; h: number; ratio: number } | null = null;
 
   private selected: { exit: ExitDef; headingDeg: number } | null = null;
   private lastInitials = 'AAA';
@@ -359,6 +361,12 @@ export class Game {
           if (!paused) {
             this.flightFrames++;
             this.flightSeconds += dtS;
+            const c = this.world.renderer.domElement;
+            this.flightCanvas = {
+              w: c.width,
+              h: c.height,
+              ratio: this.world.renderer.getPixelRatio(),
+            };
           }
           break;
         case 'results':
@@ -594,7 +602,12 @@ export class Game {
 
   /** What the tester form's technical-details line is built from. */
   feedbackContext(): FeedbackContext {
-    const canvas = this.world.renderer.domElement;
+    const live = this.world.renderer.domElement;
+    const canvas = this.flightCanvas ?? {
+      w: live.width,
+      h: live.height,
+      ratio: this.world.renderer.getPixelRatio(),
+    };
     const out = this.run?.outcome;
     const exit = this.selected?.exit;
     return {
@@ -602,9 +615,9 @@ export class Game {
       device: this.input.touchUi ? 'phone' : 'desktop',
       gpu: gpuName(this.world.renderer),
       userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent,
-      canvasW: canvas.width,
-      canvasH: canvas.height,
-      renderRatio: this.world.renderer.getPixelRatio(),
+      canvasW: canvas.w,
+      canvasH: canvas.h,
+      renderRatio: canvas.ratio,
       preset: this.settings.value.quality,
       run:
         out && exit
