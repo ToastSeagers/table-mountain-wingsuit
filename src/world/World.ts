@@ -136,7 +136,7 @@ export class World {
     this.terrain.lodErrorPx = s.lodErrorPx;
     this.terrain.maxTerrainTriangles = s.maxTerrainTriangles;
     this.renderer.toneMappingExposure = s.exposure;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, s.maxPixelRatio));
+    this.applyPixelRatio();
     const shadow = this.sun.light.shadow;
     if (shadow.mapSize.x !== s.shadowMapSize) {
       shadow.mapSize.set(s.shadowMapSize, s.shadowMapSize);
@@ -155,6 +155,20 @@ export class World {
   /** A copy of the current settings, for a settings panel to edit and apply back. */
   snapshotSettings(): WorldSettings {
     return cloneSettings(this.current);
+  }
+
+  /** Fraction of the preset's pixel ratio actually rendered; the results screen covers most of the frame. */
+  private renderScale = 1;
+
+  setRenderScale(scale: number): void {
+    if (scale === this.renderScale) return;
+    this.renderScale = scale;
+    this.applyPixelRatio();
+    this.resize(this.renderer.domElement.clientWidth || window.innerWidth, this.renderer.domElement.clientHeight || window.innerHeight);
+  }
+
+  private applyPixelRatio(): void {
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.current.maxPixelRatio) * this.renderScale);
   }
 
   resize(widthPx: number, heightPx: number): void {
