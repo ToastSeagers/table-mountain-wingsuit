@@ -45,6 +45,28 @@ Shorter version for a second group:
 
 > Wingsuit game over Table Mountain, in the browser, phone-friendly: https://toastseagers.github.io/table-mountain-wingsuit/ . Tap FEEDBACK after a run and tell me what you thought, good or bad.
 
+### Reddit version (AI disclosure first)
+
+Posted where the subreddit's rules allow AI-assisted work; the disclosure is the first line so nobody feels tricked. Suggested title: *I built a wingsuit game over the real Table Mountain with Claude doing the coding. Free, in the browser, honest feedback wanted.*
+
+> **Upfront: the code was written by an AI (Claude Code). I directed it, tested it, and made the calls; I did not write the TypeScript.** If that is a dealbreaker for you, fair enough, no argument from me.
+>
+> What it is: a browser wingsuit game on the real Table Mountain, built from the City of Cape Town's open LiDAR contours and aerial imagery. Three launch points, a parachute, landing zones, an old-school score screen. Free, no install, no account, no ads, no tracking. Works on a phone.
+>
+> https://toastseagers.github.io/table-mountain-wingsuit/
+>
+> Where things came from, since that is the fair question: terrain and photos are the City's open data under their non-commercial terms, the sound is synthesised in code, the one font is OFL, no asset packs, nothing scraped from other games. The code is MIT on GitHub if you want to look: https://github.com/ToastSeagers/table-mountain-wingsuit
+>
+> What I would like to know: does it feel good to fly, do the phone controls make sense, and how it runs on your hardware. There is a FEEDBACK button on the results screen (eight taps, it fills in your device details itself), or just tell me here.
+>
+> The launch points are fictional. BASE jumping is prohibited in the park. Please do not try this.
+
+Notes for the owner when posting:
+
+- Check each subreddit's rules on AI-generated content before posting; several game-dev subreddits ban it outright and a ban is worse than not posting. Local (r/capetown), web-game and wingsuit communities are better fits than r/gamedev. Use an "AI-assisted" flair where one exists.
+- Answer specific questions, do not argue the general point. Anyone who objects on principle is not going to be a tester.
+- The same disclosure can go in one line on the game's title screen later if the thread shows people want it in the product, not just the post.
+
 ## 4. Closing the loop
 
 1. Every few days the Orchestrator reads the responses sheet.
