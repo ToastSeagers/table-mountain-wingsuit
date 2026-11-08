@@ -168,7 +168,7 @@ export class World {
   }
 
   private applyPixelRatio(): void {
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.current.maxPixelRatio) * this.renderScale);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.current.maxPixelRatio) * this.current.renderScale * this.renderScale);
   }
 
   resize(widthPx: number, heightPx: number): void {

@@ -1,7 +1,7 @@
 import { Persistence } from './Persistence';
 
-export type QualityPreset = 'low' | 'medium' | 'high';
-export const QUALITY_PRESETS: readonly QualityPreset[] = ['low', 'medium', 'high'];
+export type QualityPreset = 'low' | 'medium' | 'high' | 'mobile';
+export const QUALITY_PRESETS: readonly QualityPreset[] = ['low', 'medium', 'high', 'mobile'];
 
 /** Player settings, persisted under `tmw.settings.v1`. Stage 5 reads the audio and quality fields. */
 export interface Settings {
@@ -9,6 +9,8 @@ export interface Settings {
   worldVolume: number;
   uiVolume: number;
   quality: QualityPreset;
+  /** True until the player picks a preset: `quality` then follows the device (phones get 'mobile'). */
+  qualityAuto: boolean;
   vhsOverlay: boolean;
   invertPitch: boolean;
   cameraShake: boolean;
@@ -20,6 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   worldVolume: 1,
   uiVolume: 0.8,
   quality: 'medium',
+  qualityAuto: true,
   vhsOverlay: true,
   invertPitch: false,
   cameraShake: true,
@@ -42,11 +45,14 @@ export function sanitiseSettings(raw: unknown): Settings | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
   const d = DEFAULT_SETTINGS;
+  const quality = QUALITY_PRESETS.includes(r.quality as QualityPreset) ? (r.quality as QualityPreset) : d.quality;
   return {
     masterVolume: unit(r.masterVolume, d.masterVolume),
     worldVolume: unit(r.worldVolume, d.worldVolume),
     uiVolume: unit(r.uiVolume, d.uiVolume),
-    quality: QUALITY_PRESETS.includes(r.quality as QualityPreset) ? (r.quality as QualityPreset) : d.quality,
+    quality,
+    // Saves from v0.1 have no flag: a preset other than the default was a choice, so keep it.
+    qualityAuto: bool(r.qualityAuto, quality === d.quality),
     vhsOverlay: bool(r.vhsOverlay, d.vhsOverlay),
     invertPitch: bool(r.invertPitch, d.invertPitch),
     cameraShake: bool(r.cameraShake, d.cameraShake),
@@ -59,8 +65,13 @@ export class SettingsStore {
   private current: Settings;
   private readonly listeners = new Set<(s: Readonly<Settings>) => void>();
 
-  constructor(private readonly persistence: Persistence) {
-    this.current = persistence.load(SETTINGS_NAME, SETTINGS_VERSION, sanitiseSettings, () => ({ ...DEFAULT_SETTINGS }));
+  /** `autoQuality` is what an un-chosen quality resolves to on this device (see core/device.ts). */
+  constructor(
+    private readonly persistence: Persistence,
+    private readonly autoQuality: QualityPreset = DEFAULT_SETTINGS.quality,
+  ) {
+    const loaded = persistence.load(SETTINGS_NAME, SETTINGS_VERSION, sanitiseSettings, () => ({ ...DEFAULT_SETTINGS }));
+    this.current = loaded.qualityAuto ? { ...loaded, quality: autoQuality } : loaded;
   }
 
   get value(): Readonly<Settings> {
@@ -68,7 +79,17 @@ export class SettingsStore {
   }
 
   set<K extends keyof Settings>(key: K, value: Settings[K]): void {
-    this.current = { ...this.current, [key]: value };
+    this.current = { ...this.current, [key]: value, ...(key === 'quality' ? { qualityAuto: false } : {}) };
+    this.persist();
+  }
+
+  /** Back to the device's own choice of preset. */
+  setQualityAuto(): void {
+    this.current = { ...this.current, quality: this.autoQuality, qualityAuto: true };
+    this.persist();
+  }
+
+  private persist(): void {
     this.persistence.save(SETTINGS_NAME, SETTINGS_VERSION, this.current);
     for (const l of this.listeners) l(this.current);
   }

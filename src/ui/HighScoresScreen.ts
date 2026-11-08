@@ -76,7 +76,14 @@ export class HighScoresScreen extends Screen {
     const exit = this.exits()[this.exitIndex];
     if (!exit) return;
     this.title.textContent = '';
-    this.title.append('◀ ', el('b', '', exit.name.toUpperCase()), ' ▶');
+    const l = el('button', 'tab-arrow', '\u25C0');
+    const r = el('button', 'tab-arrow', '\u25B6');
+    l.type = r.type = 'button';
+    l.setAttribute('aria-label', 'Previous exit');
+    r.setAttribute('aria-label', 'Next exit');
+    l.addEventListener('click', () => this.handleNav('left'));
+    r.addEventListener('click', () => this.handleNav('right'));
+    this.title.append(l, el('b', '', exit.name.toUpperCase()), r);
     this.table.textContent = '';
     const list = this.profile.entries(exit.id);
     for (let i = 0; i < MAX_SCORES_PER_EXIT; i++) {

@@ -5,7 +5,7 @@ import { el, Screen, type UiContext } from './dom';
 
 export type SettingsRow =
   | { kind: 'slider'; key: 'masterVolume' | 'worldVolume' | 'uiVolume'; label: string }
-  | { kind: 'choice'; key: 'quality'; label: string; options: readonly string[] }
+  | { kind: 'quality'; label: string }
   | { kind: 'toggle'; key: 'vhsOverlay' | 'invertPitch' | 'cameraShake'; label: string }
   | { kind: 'steps'; key: 'mouseSensitivity'; label: string; values: readonly number[] }
   | { kind: 'info'; label: string; text: () => string }
@@ -30,7 +30,7 @@ export class SettingsScreen extends Screen {
     { kind: 'slider', key: 'masterVolume', label: 'MASTER VOLUME' },
     { kind: 'slider', key: 'worldVolume', label: 'WORLD VOLUME' },
     { kind: 'slider', key: 'uiVolume', label: 'UI VOLUME' },
-    { kind: 'choice', key: 'quality', label: 'QUALITY', options: QUALITY_PRESETS },
+    { kind: 'quality', label: 'QUALITY' },
     { kind: 'toggle', key: 'vhsOverlay', label: 'VHS OVERLAY' },
     { kind: 'toggle', key: 'invertPitch', label: 'INVERT PITCH' },
     { kind: 'toggle', key: 'cameraShake', label: 'CAMERA SHAKE' },
@@ -117,15 +117,20 @@ export class SettingsScreen extends Screen {
     const s = this.settings.value;
     switch (row.kind) {
       case 'slider': {
-        const v = Math.round(Math.min(1, Math.max(0, s[row.key] + dir * 0.1)) * 10) / 10;
+        // A tap (wrap) on a full slider goes back to zero, so touch can reach every value.
+        const stepped = wrap && dir > 0 && s[row.key] >= 0.95 ? 0 : s[row.key] + dir * 0.1;
+        const v = Math.round(Math.min(1, Math.max(0, stepped)) * 10) / 10;
         this.settings.set(row.key, v);
         break;
       }
-      case 'choice': {
-        const i = row.options.indexOf(s[row.key]);
-        const n = row.options.length;
-        const next = wrap ? (i + dir + n) % n : Math.min(n - 1, Math.max(0, i + dir));
-        this.settings.set(row.key, row.options[next] as Settings['quality']);
+      case 'quality': {
+        // AUTO follows the device (phones get MOBILE); the rest are explicit choices.
+        const options: readonly (Settings['quality'] | 'auto')[] = ['auto', ...QUALITY_PRESETS];
+        const i = s.qualityAuto ? 0 : options.indexOf(s.quality);
+        const n = options.length;
+        const next = options[wrap ? (i + dir + n) % n : Math.min(n - 1, Math.max(0, i + dir))];
+        if (next === 'auto') this.settings.setQualityAuto();
+        else this.settings.set('quality', next);
         break;
       }
       case 'toggle':
@@ -133,7 +138,8 @@ export class SettingsScreen extends Screen {
         break;
       case 'steps': {
         const i = Math.max(0, row.values.findIndex((v) => v >= s[row.key] - 1e-6));
-        const next = Math.min(row.values.length - 1, Math.max(0, i + dir));
+        const n = row.values.length;
+        const next = wrap ? (i + dir + n) % n : Math.min(n - 1, Math.max(0, i + dir));
         this.settings.set(row.key, row.values[next]);
         break;
       }
@@ -169,8 +175,8 @@ export class SettingsScreen extends Screen {
         const n = Math.round(s[row.key] * 10);
         return '#'.repeat(n) + '-'.repeat(10 - n);
       }
-      case 'choice':
-        return `< ${String(s[row.key]).toUpperCase()} >`;
+      case 'quality':
+        return s.qualityAuto ? `< AUTO: ${s.quality.toUpperCase()} >` : `< ${s.quality.toUpperCase()} >`;
       case 'toggle':
         return s[row.key] ? 'ON' : 'OFF';
       case 'steps':

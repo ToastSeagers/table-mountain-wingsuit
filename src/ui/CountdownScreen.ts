@@ -21,6 +21,18 @@ export class CountdownScreen extends Screen {
       ['PAD', 'STICK, TRIGGERS, A'],
     ];
     for (const [k, v] of rows) this.controls.append(el('b', '', k), el('span', '', v));
+    // The phone's cheat sheet replaces the keyboard one (CSS swaps them on touch).
+    this.controls.classList.add('kb-only');
+    const touch = el('div', 'controls touch-only');
+    const touchRows: [string, string][] = [
+      ['DRAG SIDEWAYS', 'BANK'],
+      ['DRAG UP / DOWN', 'PULL UP / DIVE'],
+      ['HOLD A SIDE', 'GENTLE BANK'],
+      ['PULL', 'DEPLOY, THEN FLARE'],
+      ['BRAKE', 'UNDER CANOPY'],
+    ];
+    for (const [k, v] of touchRows) touch.append(el('b', '', k), el('span', '', v));
+    wrap.appendChild(touch);
   }
 
   /** 3, 2, 1 or 0 for GO. */
