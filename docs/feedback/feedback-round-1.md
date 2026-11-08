@@ -123,6 +123,10 @@ Notes for the owner when posting:
 - Answer specific questions, do not argue the general point. Anyone who objects on principle is not going to be a tester.
 - The same disclosure can go in one line on the game's title screen later if the thread shows people want it in the product, not just the post.
 
+### First comment acted on
+
+A r/vibecoding commenter warned that a green check can pass without running anything (their CI only ran a secret scan on draft PRs). True of this repo in a different form: the Pages workflow only built, and the 232 tests ran by hand at each gate. Fixed the same evening: a `check` job (test, lint, typecheck, JUnit artifact) now gates the build and deploy, the README carries the workflow badge, and the first CI run found a real difference between the laptop and the runner (a terrain test over the 5 s default timeout). Reply posted to the thread.
+
 ## 4. Closing the loop
 
 1. Every few days the Orchestrator reads the responses sheet.
