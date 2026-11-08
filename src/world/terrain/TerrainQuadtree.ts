@@ -323,7 +323,7 @@ export class TerrainQuadtree {
             const fx = di / 2;
             const fz = dj / 2;
             const m = fx >= fz ? h00 + fx * (h10 - h00) + fz * (h11 - h10) : h00 + fz * (h01 - h00) + fx * (h11 - h01);
-            const e = Math.abs(h - m);
+            const e = visibleDiff(h, m);
             if (e > err) err = e;
             // Children: quadrant of this sample (edge samples count for both sides).
             const sx = ci * 2 + di;
@@ -391,11 +391,11 @@ export class TerrainQuadtree {
         const s = store.sampleWithApron(a + h, b + S);
         dev = Math.max(
           dev,
-          Math.abs(mid - (h00 + h11) / 2),
-          Math.abs(n - (h00 + h10) / 2),
-          Math.abs(w - (h00 + h01) / 2),
-          Math.abs(e - (h10 + h11) / 2),
-          Math.abs(s - (h01 + h11) / 2),
+          visibleDiff(mid, (h00 + h11) / 2),
+          visibleDiff(n, (h00 + h10) / 2),
+          visibleDiff(w, (h00 + h01) / 2),
+          visibleDiff(e, (h10 + h11) / 2),
+          visibleDiff(s, (h01 + h11) / 2),
         );
       }
     }
@@ -405,6 +405,15 @@ export class TerrainQuadtree {
     l.maxY[k] = maxY;
     if (lod < MAX_LOD) this.dirtyUp[lod + 1].add((iz >> 1) * this.levels[lod + 1].nx + (ix >> 1));
   }
+}
+
+/**
+ * Height difference as seen: anything below sea level is hidden under the opaque sea plane, so
+ * only the apron (the one place heights go negative) is affected; inside the data heights are
+ * never below 0 and this is a plain absolute difference.
+ */
+function visibleDiff(a: number, b: number): number {
+  return Math.abs(Math.max(a, 0) - Math.max(b, 0));
 }
 
 function boxDistance(b: NodeBox, x: number, y: number, z: number): number {

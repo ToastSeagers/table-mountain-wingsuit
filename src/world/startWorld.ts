@@ -25,6 +25,12 @@ export interface DevHook {
   stats(): TerrainStats & PerfSample;
   /** Waits for streaming to settle, then averages over `seconds`. */
   measure(seconds: number): Promise<Record<string, unknown>>;
+  /**
+   * Visibility-independent benchmark: drives frames itself until streaming settles, then renders
+   * `frames` back-to-back with gl.finish() after each, so the time is the real per-frame cost
+   * (CPU + GPU) without vsync or the hidden-pane rAF pause.
+   */
+  bench(frames: number): Promise<Record<string, unknown>>;
   /** Renders one frame and returns the canvas as a PNG. */
   capture(): Promise<Blob>;
 }
@@ -161,6 +167,80 @@ function installDevHook(
         settleS: round((performance.now() - t0) / 1000 - seconds, 1),
       };
     },
+    async bench(frames) {
+      const gl = world.renderer.getContext();
+      const timer = gl.getExtension('EXT_disjoint_timer_query_webgl2') as { TIME_ELAPSED_EXT: number } | null;
+      const gl2 = gl as WebGL2RenderingContext;
+      const t0 = performance.now();
+      let driven = 0;
+      for (;;) {
+        world.frame(performance.now() / 1000);
+        driven++;
+        const s = world.terrain.stats;
+        const settled = s.requestsQueued === 0 && s.pendingMeasurements === 0 && s.texturesLoading === 0;
+        if ((settled && driven > 30) || performance.now() - t0 > 60_000) break;
+        await yieldTask();
+      }
+      // Let tile cross-fades finish (they are time-based).
+      const fadeEnd = performance.now() + 500;
+      while (performance.now() < fadeEnd) {
+        world.frame(performance.now() / 1000);
+        await yieldTask();
+      }
+      const wall: number[] = [];
+      const cpu: number[] = [];
+      const queries: WebGLQuery[] = [];
+      let tris = 0;
+      let calls = 0;
+      gl.finish();
+      for (let i = 0; i < frames; i++) {
+        const q = timer ? gl2.createQuery() : null;
+        if (timer && q) gl2.beginQuery(timer.TIME_ELAPSED_EXT, q);
+        const a = performance.now();
+        world.frame(performance.now() / 1000);
+        const b = performance.now();
+        if (timer && q) {
+          gl2.endQuery(timer.TIME_ELAPSED_EXT);
+          queries.push(q);
+        }
+        gl.finish();
+        const c = performance.now();
+        cpu.push(b - a);
+        wall.push(c - a);
+        tris = world.renderer.info.render.triangles;
+        calls = world.renderer.info.render.calls;
+      }
+      await yieldTask();
+      const gpu: number[] = [];
+      for (const q of queries) {
+        if (gl2.getQueryParameter(q, gl2.QUERY_RESULT_AVAILABLE)) gpu.push((gl2.getQueryParameter(q, gl2.QUERY_RESULT) as number) / 1e6);
+        gl2.deleteQuery(q);
+      }
+      const t = world.terrain.stats;
+      const c = world.renderer.domElement;
+      const p95 = (a: number[]): number => [...a].sort((x, y) => x - y)[Math.floor(a.length * 0.95)] ?? Number.NaN;
+      return {
+        view: viewId(),
+        gpu: overlay.gpu,
+        canvas: `${c.width}x${c.height}`,
+        shadows: world.settings.shadows,
+        frames,
+        frameMs: round(mean(wall), 2),
+        frameMsP95: round(p95(wall), 2),
+        uncappedFps: round(1000 / mean(wall), 0),
+        cpuMs: round(mean(cpu), 2),
+        gpuMs: gpu.length ? round(mean(gpu), 2) : null,
+        gpuMsP95: gpu.length ? round(p95(gpu), 2) : null,
+        triangles: tris,
+        drawCalls: calls,
+        chunks: t.chunks,
+        chunksPerLod: t.chunksPerLod,
+        heightTilesLoaded: t.heightTilesLoaded,
+        texturesResident: t.texturesResident,
+        mbFetched: round(t.mbFetched, 1),
+        settleS: round((performance.now() - t0) / 1000, 1),
+      };
+    },
     capture() {
       world.frame(performance.now() / 1000);
       return new Promise<Blob>((res, rej) =>
@@ -169,6 +249,15 @@ function installDevHook(
     },
   };
   (window as unknown as { __tmw: DevHook }).__tmw = hook;
+}
+
+/** Yields to the event loop without timer clamping (works while the page is hidden). */
+function yieldTask(): Promise<void> {
+  return new Promise((r) => {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => r();
+    ch.port2.postMessage(0);
+  });
 }
 
 function sleep(ms: number): Promise<void> {

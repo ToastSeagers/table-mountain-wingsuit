@@ -2,8 +2,13 @@ import type { TerrainMeta } from './TerrainMeta';
 
 /** Apron outside the data: edge height fades to sea over this distance. */
 export const APRON_FADE_M = 2000;
-/** The apron also sinks below the sea plane so the two never z-fight. */
-export const APRON_SINK_M = 6;
+/**
+ * The apron also sinks below the sea plane, fast, so low coastal edges (beaches, dunes) drop
+ * under the sea within a few hundred metres instead of stretching into pale spits, and the
+ * apron never z-fights the sea plane.
+ */
+export const APRON_SINK_M = 20;
+export const APRON_SINK_DIST_M = 200;
 
 export type TileListener = (col: number, row: number) => void;
 
@@ -104,7 +109,7 @@ export class HeightTileStore {
 export function apronHeight(edgeHeightM: number, outsideM: number): number {
   const t = Math.min(outsideM / APRON_FADE_M, 1);
   const fade = 1 - t * t * (3 - 2 * t);
-  const sink = Math.min(outsideM / 300, 1) * APRON_SINK_M;
+  const sink = Math.min(outsideM / APRON_SINK_DIST_M, 1) * APRON_SINK_M;
   return edgeHeightM * fade - sink;
 }
 

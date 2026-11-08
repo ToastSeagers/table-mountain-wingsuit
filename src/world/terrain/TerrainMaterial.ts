@@ -48,6 +48,8 @@ varying vec3 vWorld;
 #include <common>
 #include <packing>
 #include <shadowmap_pars_fragment>
+// Set by three per object; Three's own lights_pars chunks normally declare it.
+uniform bool receiveShadow;
 #include <shadowmask_pars_fragment>
 #include <logdepthbuf_pars_fragment>
 
@@ -57,10 +59,12 @@ float H(vec2 xz) {
 }
 
 vec3 tileSample(int slot, vec2 uv, vec2 dx, vec2 dy) {
-  if (slot == 0) return textureGrad(uTile0, uv, dx, dy).rgb;
-  if (slot == 1) return textureGrad(uTile1, uv, dx, dy).rgb;
-  if (slot == 2) return textureGrad(uTile2, uv, dx, dy).rgb;
-  return textureGrad(uTile3, uv, dx, dy).rgb;
+  vec3 c;
+  if (slot == 0) c = textureGrad(uTile0, uv, dx, dy).rgb;
+  else if (slot == 1) c = textureGrad(uTile1, uv, dx, dy).rgb;
+  else if (slot == 2) c = textureGrad(uTile2, uv, dx, dy).rgb;
+  else c = textureGrad(uTile3, uv, dx, dy).rgb;
+  return c;
 }
 
 void main() {

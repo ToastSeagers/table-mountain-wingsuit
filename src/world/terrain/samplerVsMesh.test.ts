@@ -1,4 +1,4 @@
-import { BufferGeometry, Mesh, MeshBasicMaterial, Raycaster, Vector3 } from 'three';
+import { BufferGeometry, Frustum, Matrix4, Mesh, MeshBasicMaterial, PerspectiveCamera, Raycaster, Vector3 } from 'three';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { TerrainSamplerImpl } from '../TerrainSamplerImpl';
 import { measurementViewpoints } from '../viewpoints';
@@ -112,6 +112,49 @@ describe('TerrainSampler versus the rendered mesh', () => {
       }
       console.info(`${vp.id}: ${nodes.length} chunks, max |sampler - raycast| within 700 m = ${maxErr.toFixed(3)} m`);
       expect(maxErr, vp.id).toBeLessThan(1);
+    }
+  });
+
+  it('agrees with the mesh actually drawn (64-chunk cap, frustum) within 1 m in the 700 m ahead', () => {
+    const rand = mulberry32(11);
+    const maxChunks = Math.floor(560_000 / TRIANGLES_PER_CHUNK);
+    for (const vp of measurementViewpoints()) {
+      const cam = new PerspectiveCamera(70, 16 / 9, 1, 80_000);
+      cam.position.set(vp.position.x, vp.position.y, vp.position.z);
+      cam.rotation.order = 'YXZ';
+      cam.rotation.set((vp.pitchDeg * Math.PI) / 180, (-vp.headingDeg * Math.PI) / 180, 0);
+      cam.updateMatrixWorld();
+      const frustum = new Frustum().setFromProjectionMatrix(
+        new Matrix4().multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse),
+      );
+      const nodes = tree.select({
+        camX: cam.position.x,
+        camY: cam.position.y,
+        camZ: cam.position.z,
+        pxPerUnitAtDistance: 1080 / (2 * Math.tan((70 * Math.PI) / 360)),
+        errorPx: 2,
+        maxChunks,
+        frustum,
+      });
+      expect(nodes.length).toBeLessThanOrEqual(maxChunks);
+      const meshes = nodes.map((n) => probe.mesh(n));
+      const bands = [150, 300, 700, 1500];
+      const worst = bands.map(() => 0);
+      const h = (vp.headingDeg * Math.PI) / 180;
+      for (let i = 0; i < 2000; i++) {
+        // Points ahead of the camera within +-30 degrees of the heading.
+        const r = 1500 * Math.sqrt(rand());
+        const a = h + (rand() - 0.5) * (Math.PI / 3);
+        const x = cam.position.x + r * Math.sin(a);
+        const z = cam.position.z - r * Math.cos(a);
+        const y = probe.heightOn(meshes, x, z);
+        if (y === null) continue; // culled (below the view) or outside the data
+        const err = Math.abs(y - sampler.heightAt(x, z));
+        const b = bands.findIndex((d) => r <= d);
+        worst[b] = Math.max(worst[b], err);
+      }
+      console.info(`${vp.id}: ${nodes.length} chunks drawn; worst |sampler - drawn mesh| by distance ${bands.map((d, k) => `<=${d} m: ${worst[k].toFixed(2)}`).join(', ')}`);
+      expect(Math.max(worst[0], worst[1], worst[2]), vp.id).toBeLessThan(1);
     }
   });
 

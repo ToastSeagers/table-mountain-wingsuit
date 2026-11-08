@@ -1,6 +1,6 @@
 import {
   ACESFilmicToneMapping,
-  PCFSoftShadowMap,
+  PCFShadowMap,
   PerspectiveCamera,
   Scene,
   SRGBColorSpace,
@@ -92,7 +92,7 @@ export class World {
     });
     renderer.outputColorSpace = SRGBColorSpace;
     renderer.toneMapping = ACESFilmicToneMapping;
-    renderer.shadowMap.type = PCFSoftShadowMap;
+    renderer.shadowMap.type = PCFShadowMap;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, settings.maxPixelRatio));
     opts.container.appendChild(renderer.domElement);
     const uniforms = createWorldUniforms();
