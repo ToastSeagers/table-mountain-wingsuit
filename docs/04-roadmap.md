@@ -29,3 +29,4 @@ Anything not in `PLAN.md` section 1 lives here. Agents add ideas to the bottom w
 ## Ideas log (append here)
 
 - 
+- Stage 6 follow-ups: reuse PostStack targets across render-scale changes (hitch on entering results); CI step running tests and lint before Pages deploy; terrain-aware autopilot for balance probes; replace the Clifton shader mask with a rebuilt sea mask.

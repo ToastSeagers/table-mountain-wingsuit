@@ -1,9 +1,9 @@
 import { defineConfig } from 'vitest/config';
 
-// GitHub Pages serves the site under /table-mountain-wingsuit/. Only the production build uses
+// GitHub Pages serves the site under /table-mountain-wingsuit/. Only the production build (and `vite preview` of it) uses
 // that base; `npm run dev` and Vitest stay at the root so local URLs do not change.
-export default defineConfig(({ command }) => ({
-  base: command === 'build' ? '/table-mountain-wingsuit/' : '/',
+export default defineConfig(({ command, isPreview }) => ({
+  base: command === 'build' || isPreview ? '/table-mountain-wingsuit/' : '/',
   build: {
     // Three.js alone is ~530 kB minified; the split keeps the game chunk small, so raise the warning line.
     chunkSizeWarningLimit: 560,
