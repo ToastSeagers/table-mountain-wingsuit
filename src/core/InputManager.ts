@@ -12,6 +12,7 @@ import {
   type NavEvent,
   type PadSnapshot,
 } from './inputMapping';
+import { TouchButtons, TouchSteer } from './touchMapping';
 
 /** The player's raw intent before the game decides what deploy and flare mean. */
 export interface RawFlightInput {
@@ -60,6 +61,9 @@ export class InputManager {
   private kbPitch = 0;
   private kbRoll = 0;
   private kbYaw = 0;
+  /** Smoothed touch-stick axes (same 120 ms low-pass as the keyboard). */
+  private tPitch = 0;
+  private tRoll = 0;
   private pad: PadSnapshot | null = null;
   private padIndex = -1;
   private readonly padPrev = new Map<number, boolean>();
@@ -69,6 +73,14 @@ export class InputManager {
   private readonly navHandlers = new Set<NavHandler>();
   private readonly keyHandlers = new Set<(e: KeyboardEvent) => void>();
   private readonly disposers: (() => void)[] = [];
+  /** Finger steering and on-screen buttons (stage 7). The UI feeds `touchButtons`; pointer events feed `touchSteer`. */
+  readonly touchSteer = new TouchSteer();
+  readonly touchButtons = new TouchButtons();
+  /** On-screen controls are in use: a phone, `?touch=1`, or a finger was seen on a hybrid device. */
+  touchUi = false;
+  /** Game sets this while a flight is live and unpaused; pointer drags steer only then. */
+  touchSteerEnabled = false;
+  private readonly touchUiListeners = new Set<(on: boolean) => void>();
   /** Set by UI that wants raw keys (initials entry) so menus do not also react to them. */
   captureKeys = false;
 
@@ -82,7 +94,12 @@ export class InputManager {
     on('blur', () => {
       this.down.clear();
       this.mouse.reset();
+      this.resetTouch();
     });
+    on('pointerdown', (e) => this.onPointerDown(e));
+    on('pointermove', (e) => this.touchSteer.move(e.pointerId, e.clientX, e.clientY));
+    on('pointerup', (e) => this.touchSteer.end(e.pointerId));
+    on('pointercancel', (e) => this.touchSteer.end(e.pointerId));
     on('mousemove', (e) => {
       if (this.pointerLocked) this.mouse.move(e.movementX, e.movementY, this.mouseSensitivity, this.invertPitch);
     });
@@ -138,6 +155,38 @@ export class InputManager {
     this.down.clear();
     this.mouse.reset();
     this.kbPitch = this.kbRoll = this.kbYaw = 0;
+    this.resetTouch();
+  }
+
+  private resetTouch(): void {
+    this.touchSteer.reset();
+    this.touchButtons.releaseAll();
+    this.tPitch = this.tRoll = 0;
+  }
+
+  /** Lets on-screen buttons raise the same events as keys (pause, camera). */
+  injectNav(nav: NavEvent): void {
+    this.emit(nav);
+  }
+
+  /** Called by the Game with the stage's decision; also flips on when a real finger touches a hybrid device. */
+  setTouchUi(on: boolean): void {
+    if (on === this.touchUi) return;
+    this.touchUi = on;
+    for (const l of this.touchUiListeners) l(on);
+  }
+
+  onTouchUi(listener: (on: boolean) => void): () => void {
+    this.touchUiListeners.add(listener);
+    return () => {
+      this.touchUiListeners.delete(listener);
+    };
+  }
+
+  setTouchSteerEnabled(on: boolean): void {
+    if (this.touchSteerEnabled === on) return;
+    this.touchSteerEnabled = on;
+    if (!on) this.resetTouch();
   }
 
   /** Polls the pad (call once per frame) and emits edge-detected menu events. */
@@ -183,15 +232,23 @@ export class InputManager {
     this.kbRoll = lowPass(this.kbRoll, kb.roll, dtS, KEYBOARD_SMOOTHING_S);
     this.kbYaw = lowPass(this.kbYaw, kb.yaw, dtS, KEYBOARD_SMOOTHING_S);
     this.mouse.update(dtS);
+    this.touchSteer.invertPitch = this.invertPitch;
+    this.touchSteer.setScreen(window.innerWidth);
+    this.touchSteer.update(dtS);
+    this.tPitch = lowPass(this.tPitch, this.touchSteer.pitch, dtS, KEYBOARD_SMOOTHING_S);
+    this.tRoll = lowPass(this.tRoll, this.touchSteer.roll, dtS, KEYBOARD_SMOOTHING_S);
+    // TILT HOOK: an optional device-orientation source (settings choice, off by default) would be
+    // merged here with `strongest`, as the touch stick is. Not built in Stage 7; see core/touchMapping.ts.
     const pad = this.pad ? mapGamepad(this.pad, this.invertPitch) : null;
-    const analogPitch = strongest(this.mouse.pitch, pad?.pitch ?? 0);
-    const analogRoll = strongest(this.mouse.roll, pad?.roll ?? 0);
+    const analogPitch = strongest(strongest(this.mouse.pitch, pad?.pitch ?? 0), this.tPitch);
+    const analogRoll = strongest(strongest(this.mouse.roll, pad?.roll ?? 0), this.tRoll);
     return {
       pitch: clamp(strongest(this.kbPitch, analogPitch), -1, 1),
       roll: clamp(strongest(this.kbRoll, analogRoll), -1, 1),
       yaw: clamp(strongest(this.kbYaw, pad?.yaw ?? 0), -1, 1),
-      action: this.down.has('Space') || (pad?.action ?? false),
-      brake: this.down.has('ShiftLeft') || this.down.has('ShiftRight') || (pad?.brake ?? false),
+      // consume(): a tap on PULL shorter than one simulation step still counts as a press.
+      action: this.down.has('Space') || (pad?.action ?? false) || this.touchButtons.consume('action'),
+      brake: this.down.has('ShiftLeft') || this.down.has('ShiftRight') || (pad?.brake ?? false) || this.touchButtons.isHeld('brake'),
     };
   }
 
@@ -205,6 +262,17 @@ export class InputManager {
     for (const d of this.disposers) d();
     this.navHandlers.clear();
     this.keyHandlers.clear();
+  }
+
+  private onPointerDown(e: PointerEvent): void {
+    // A finger on a hybrid laptop switches the on-screen controls on for the rest of the session.
+    if (e.pointerType === 'touch') this.setTouchUi(true);
+    if (!this.touchUi || !this.touchSteerEnabled) return;
+    // On a touch-first device a mouse pointer is how emulators and Bluetooth mice arrive: treat it as a finger.
+    if (e.pointerType !== 'touch' && e.pointerType !== 'pen' && e.pointerType !== 'mouse') return;
+    if (e.target instanceof Element && e.target.closest('button, .touch-btn')) return;
+    this.touchSteer.setScreen(window.innerWidth);
+    this.touchSteer.begin(e.pointerId, e.clientX, e.clientY);
   }
 
   private onKeyDown(e: KeyboardEvent): void {
