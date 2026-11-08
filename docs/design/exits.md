@@ -39,7 +39,7 @@ These are real open areas used by the paragliding community around the mountain,
 | `camps-bay-beach` | Camps Bay Beach | -33.9510, 18.3775 | 120 m | sand | 1 |
 | `the-glen` | The Glen Country Club | -33.9437, 18.3800 | 60 m | grass | 2 |
 | `clifton` | Clifton Fourth Beach | -33.9400, 18.3760 | 50 m | sand | 2 |
-| `sea-point-prom` | Sea Point Promenade lawns | -33.9125, 18.3900 | 70 m | grass | 2 |
+| `sea-point-prom` | Sea Point Promenade lawns | -33.9202, 18.3805 | 70 m | grass | 2 |
 | `upper-orange` | Upper Orange Road field | -33.9385, 18.4140 | 55 m | grass | 3 |
 | `uct-fields` | UCT sports fields | -33.9570, 18.4640 | 90 m | grass | 2 |
 | `tafelberg-road` | Tafelberg Road verge (emergency) | -33.9530, 18.4120 | 40 m | tarmac | 3 |

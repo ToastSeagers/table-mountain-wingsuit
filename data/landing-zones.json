@@ -5,7 +5,7 @@
     { "id": "camps-bay-beach", "name": "Camps Bay Beach",            "latLon": { "lat": -33.95099, "lon": 18.37753 }, "radiusM": 120, "surface": "sand",   "difficulty": 1 },
     { "id": "the-glen",        "name": "The Glen Country Club",      "latLon": { "lat": -33.94473, "lon": 18.37882 }, "radiusM": 60,  "surface": "grass",  "difficulty": 2 },
     { "id": "clifton",         "name": "Clifton Fourth Beach",       "latLon": { "lat": -33.9409, "lon": 18.3745 }, "radiusM": 50,  "surface": "sand",   "difficulty": 2 },
-    { "id": "sea-point-prom",  "name": "Sea Point Promenade lawns",  "latLon": { "lat": -33.912, "lon": 18.3891 }, "radiusM": 70,  "surface": "grass",  "difficulty": 2 },
+    { "id": "sea-point-prom",  "name": "Sea Point Promenade lawns",  "latLon": { "lat": -33.9202, "lon": 18.3805 }, "radiusM": 70,  "surface": "grass",  "difficulty": 2 },
     { "id": "upper-orange",    "name": "Upper Orange Road field",    "latLon": { "lat": -33.9386, "lon": 18.4148 }, "radiusM": 55,  "surface": "grass",  "difficulty": 3 },
     { "id": "uct-fields",      "name": "UCT sports fields",          "latLon": { "lat": -33.95735, "lon": 18.46315 }, "radiusM": 90,  "surface": "grass",  "difficulty": 2 },
     { "id": "tafelberg-road",  "name": "Tafelberg Road verge",       "latLon": { "lat": -33.95234, "lon": 18.41244 }, "radiusM": 40,  "surface": "tarmac", "difficulty": 3 }

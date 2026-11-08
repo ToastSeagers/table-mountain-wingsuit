@@ -15,6 +15,8 @@ export interface AutopilotOptions {
   earlyDiveS?: number;
   /** Pitch input held while cruising (positive pulls up). */
   cruisePitch?: number;
+  /** Largest roll input the autopilot uses, 0 to 1. Gentle turns keep more energy. */
+  maxRoll?: number;
 }
 
 const DEG = 180 / Math.PI;
@@ -34,9 +36,11 @@ export function headingError(fromDeg: number, toDeg: number): number {
  */
 export class Autopilot {
   private readonly o: Required<AutopilotOptions>;
+  /** AGL at the previous update, to tell a slope falling away (AGL rising) from a real low pass. */
+  private lastAglM = Infinity;
 
   constructor(options: AutopilotOptions) {
-    this.o = { deployAglM: 130, flareAglM: 3.5, earlyDiveS: 2.5, straightS: 8, cruisePitch: 0.15, ...options };
+    this.o = { deployAglM: 130, flareAglM: 3.5, earlyDiveS: 2.5, straightS: 8, cruisePitch: 0.15, maxRoll: 1, ...options };
   }
 
   /** Writes this step's input. `input` is mutated in place. */
@@ -52,7 +56,7 @@ export class Autopilot {
     const wanted = (Math.atan2(dx, -dz) * DEG + 360) % 360;
     const err = headingError(st.headingDeg, wanted);
     // Look at the velocity heading rather than the nose once moving, so a bank does not fool it.
-    const rollCmd = Math.max(-1, Math.min(1, err / 25));
+    const rollCmd = Math.max(-this.o.maxRoll, Math.min(this.o.maxRoll, err / 25));
     if (st.phase === 'freefall' || st.phase === 'wingsuit') {
       input.pitch = st.elapsedS < this.o.earlyDiveS ? -0.4 : this.o.cruisePitch;
       // Hold the arc straight; turn once the suit is flying.
@@ -60,10 +64,15 @@ export class Autopilot {
       // Open when the target is within canopy glide of this height, or for safety when low.
       const dist = Math.hypot(dx, dz);
       const reachable = st.elapsedS > 10 && st.aglM <= 450 && dist <= st.aglM * 2.2;
-      input.deploy = st.phase === 'wingsuit' && (reachable || (st.elapsedS > 6 && st.aglM <= this.o.deployAglM));
+      // The safety deploy ignores AGL that is still rising: off a cliff the ground falls away
+      // faster than the suit, so a low reading there is not a reason to open (Lion's Head).
+      const closing = st.aglM <= this.lastAglM;
+      const lowPull = st.elapsedS > 6 && st.aglM <= this.o.deployAglM && (closing || st.aglM <= this.o.deployAglM / 2);
+      input.deploy = st.phase === 'wingsuit' && (reachable || lowPull);
     } else if (st.phase === 'deploying' || st.phase === 'canopy') {
       input.roll = rollCmd;
       input.flare = st.phase === 'canopy' && st.aglM <= this.o.flareAglM;
     }
+    this.lastAglM = st.aglM;
   }
 }
