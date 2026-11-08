@@ -336,15 +336,21 @@ export class CameraRig {
         break;
       }
       default: {
-        out.position.x = p.x - f.x * CAM.chaseBackM;
-        out.position.y = p.y - f.y * CAM.chaseBackM + CAM.chaseUpM;
-        out.position.z = p.z - f.z * CAM.chaseBackM;
+        // Pull the camera in toward the pilot (and up) until terrain no longer hides them: at a
+        // ledge below a wall the full 9 m back would put the camera behind the rock.
+        let k = 1;
+        for (let i = 0; i < 6; i++) {
+          k = [1, 0.75, 0.55, 0.4, 0.28, 0.18][i];
+          out.position.x = p.x - f.x * CAM.chaseBackM * k;
+          out.position.y = p.y - f.y * CAM.chaseBackM * k + CAM.chaseUpM + (1 - k) * 4;
+          out.position.z = p.z - f.z * CAM.chaseBackM * k;
+          if (this.lineClear(out.position, p)) break;
+        }
         out.target.x = p.x + f.x * CAM.chaseLookAheadM;
         out.target.y = p.y + f.y * CAM.chaseLookAheadM;
         out.target.z = p.z + f.z * CAM.chaseLookAheadM;
         out.fovDeg = CAM.fovTrimDeg + (CAM.fovMaxDeg - CAM.fovTrimDeg) * speedK;
-        // Terrain behind the pilot can push the camera up (a ledge below a wall). Tip the view
-        // down by part of that lift so the pilot stays in frame.
+        // If the ground still lifts the camera, tip the view down by part of that lift.
         const lift = Math.max(0, this.groundAt(out.position.x, out.position.z) + CAM.groundClearanceM - out.position.y);
         out.target.y -= lift * 0.9;
         out.position.y += lift;
@@ -354,6 +360,17 @@ export class CameraRig {
   }
 
   private readonly tmpPose: CameraPose = makePose();
+
+  /** True when no terrain sample on the segment from `a` to `b` rises above it. */
+  private lineClear(a: Vec3, b: Vec3): boolean {
+    for (let i = 1; i < 8; i++) {
+      const t = i / 8;
+      const x = a.x + (b.x - a.x) * t;
+      const z = a.z + (b.z - a.z) * t;
+      if (this.groundAt(x, z) + 0.8 > a.y + (b.y - a.y) * t) return false;
+    }
+    return true;
+  }
 
   /** A tripod spot ahead of and beside the pilot at ground level. */
   private pickLandingSpot(s: CameraSubject): Vec3 {

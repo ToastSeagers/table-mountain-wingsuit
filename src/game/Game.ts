@@ -47,7 +47,7 @@ const LANDED_HOLD_S = 2.8;
 const CRASH_HOLD_S = 0.45;
 const COUNTDOWN_STEP_S = 0.9;
 /** How long an unfinished terrain preload may hold the countdown on "3" before we fly anyway. */
-const PRELOAD_WAIT_MAX_S = 12;
+const PRELOAD_WAIT_MAX_S = 6;
 const PRELOAD_RADIUS_M = 3000;
 const GO_BANNER_S = 0.9;
 
@@ -111,6 +111,7 @@ export class Game {
   private countdownShown = -1;
   private countdownWaitedS = 0;
   private preloads = new Map<string, Promise<void>>();
+  private preloaded = new Set<string>();
   private focusedExit: ExitDef | null = null;
   private autopilot: Autopilot | null = null;
   private readonly flightInput: FlightInput = { pitch: 0, roll: 0, yaw: 0, deploy: false, flare: false, brake: false };
@@ -467,7 +468,12 @@ export class Game {
   private preloadFor(exit: ExitDef): Promise<void> {
     let p = this.preloads.get(exit.id);
     if (!p) {
-      p = this.world.terrain.preloadAround(exit.position, PRELOAD_RADIUS_M).catch(() => undefined);
+      p = this.world.terrain
+        .preloadAround(exit.position, PRELOAD_RADIUS_M)
+        .catch(() => undefined)
+        .then(() => {
+          this.preloaded.add(exit.id);
+        });
       this.preloads.set(exit.id, p);
     }
     return p;
@@ -580,9 +586,7 @@ export class Game {
 
   private preloadSettled(): boolean {
     const sel = this.selected;
-    if (!sel) return true;
-    const stats = this.world.terrain.stats;
-    return stats.requestsQueued === 0 && stats.texturesLoading === 0;
+    return !sel || this.preloaded.has(sel.exit.id);
   }
 
   // ----- flying --------------------------------------------------------------------------

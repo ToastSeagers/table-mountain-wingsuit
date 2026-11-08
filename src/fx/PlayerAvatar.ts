@@ -67,7 +67,7 @@ export class PlayerAvatar {
     const pos = cg.getAttribute('position');
     for (let i = 0; i < pos.count; i++) pos.setY(i, pos.getY(i) - 0.9 * (pos.getX(i) / 3) ** 2);
     cg.computeVertexNormals();
-    const canopyMesh = new Mesh(cg, new MeshLambertMaterial({ color: PAPER, emissive: 0x2a2418, side: DoubleSide }));
+    const canopyMesh = new Mesh(cg, new MeshLambertMaterial({ color: PAPER, emissive: 0x6a5c44, side: DoubleSide }));
     const stripe = new Mesh(
       new BoxGeometry(0.5, 0.06, 2.25),
       new MeshLambertMaterial({ color: CORAL, emissive: 0x330c0b }),

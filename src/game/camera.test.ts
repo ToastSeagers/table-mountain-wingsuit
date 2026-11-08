@@ -68,12 +68,15 @@ describe('CameraRig', () => {
   });
 
   it('keeps the camera above the ground', () => {
-    const rig = new CameraRig((x) => (x < 0 ? 600 : 0));
+    const ground = (x: number): number => (x < -2 ? 600 : 0);
+    const rig = new CameraRig(ground);
     rig.shakeEnabled = false;
     const s = subject({ position: { x: 5, y: 500, z: 0 } });
     rig.reset(s);
     settle(rig, s);
-    expect(rig.pose.position.y).toBeGreaterThanOrEqual(600 + CAM.groundClearanceM - 1e-6);
+    expect(rig.pose.position.y).toBeGreaterThanOrEqual(ground(rig.pose.position.x) + CAM.groundClearanceM - 1e-6);
+    // A wall behind the pilot pulls the camera in rather than leaving it behind the rock.
+    expect(rig.pose.position.x).toBeGreaterThan(-2);
   });
 
   it('shakes only above 60 m/s, and can be switched off', () => {
