@@ -7,8 +7,8 @@ Format: `YYYY-MM-DD · Stage N · role · DONE | BLOCKED | NOTE · one sentence 
 - 2026-11-07 · Stack is Vite + TypeScript + Three.js, Python pipeline for terrain, no backend. See PLAN.md.
 - 2026-11-07 · Coordinate frame fixed: metres, X east, Y up, Z south, origin -33.95 / 18.41. See docs/01-architecture.md section 3.
 - 2026-11-07 · Launch points are fictional placements on real geography; no real BASE exits or footage. See docs/design/exits.md section 4.
-- 2026-11-07 · Static host for v0.1: (Orchestrator to choose: GitHub Pages or Netlify).
-- 2026-11-07 · Git and GitHub identity is the ToastSeagers account. Local repo `user.name` set to `ToastSeagers` and `user.email` to the account's GitHub noreply address (`61140937+ToastSeagers@users.noreply.github.com`); remote and pushes only by the Orchestrator after `gh auth switch --user ToastSeagers`. The RhinoSFAdmin login on this machine is not used for this project.
+- 2026-11-07 · Git and GitHub identity is the ToastSeagers account. Local repo `user.name` set to `ToastSeagers` and `user.email` to the account's GitHub noreply address (`61140937+ToastSeagers@users.noreply.github.com`); remote and pushes only by the Orchestrator after `gh auth switch --user ToastSeagers`. The other GitHub login on the development machine is not used for this project.
+- 2026-11-08 · Static host for v0.1 is GitHub Pages (owner's decision). Public repository `ToastSeagers/table-mountain-wingsuit`, deployed from `main` by a GitHub Actions workflow with Vite `base` set to `/table-mountain-wingsuit/`. Stage 6 owns the workflow and the first deploy.
 
 ## Open blockers
 
