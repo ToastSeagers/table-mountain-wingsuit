@@ -69,7 +69,9 @@ export async function startWorld(container: HTMLElement, opts: StartOptions): Pr
     const t0 = performance.now();
     if (devCam) devCam.update(dtS);
     else orbit(world, centre, nowS);
+    overlay?.gpuBegin();
     world.frame(nowS);
+    overlay?.gpuEnd();
     if (overlay) {
       overlay.record(nowS, performance.now() - t0);
       overlay.draw(
@@ -121,6 +123,8 @@ function installDevHook(
       const fps: number[] = [];
       const p95: number[] = [];
       const cpu: number[] = [];
+      const gpu: number[] = [];
+      const gpu95: number[] = [];
       const end = performance.now() + seconds * 1000;
       while (performance.now() < end) {
         await sleep(500);
@@ -130,6 +134,8 @@ function installDevHook(
         fps.push(s.fps);
         p95.push(s.frameMsP95);
         cpu.push(s.cpuMsMean);
+        gpu.push(s.gpuMsMean);
+        gpu95.push(s.gpuMsP95);
       }
       const t = world.terrain.stats;
       const c = world.renderer.domElement;
@@ -142,6 +148,8 @@ function installDevHook(
         fpsMin: round(Math.min(...fps), 1),
         frameMsP95: round(Math.max(...p95), 2),
         cpuMs: round(mean(cpu), 2),
+        gpuMs: round(mean(gpu), 2),
+        gpuMsP95: round(Math.max(...gpu95), 2),
         triangles: Math.round(mean(tris)),
         trianglesMax: Math.max(...tris),
         drawCalls: Math.round(mean(calls)),

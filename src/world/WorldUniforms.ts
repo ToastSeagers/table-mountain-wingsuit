@@ -22,6 +22,7 @@ export interface WorldUniforms {
   uSkyHorizon: IUniform<Color>;
   uTime: IUniform<number>;
   uDetail: IUniform<Texture | null>;
+  uOpenSea: IUniform<Color>;
 }
 
 export function createWorldUniforms(): WorldUniforms {
@@ -42,5 +43,6 @@ export function createWorldUniforms(): WorldUniforms {
     uSkyHorizon: { value: new Color() },
     uTime: { value: 0 },
     uDetail: { value: null },
+    uOpenSea: { value: new Color() },
   };
 }

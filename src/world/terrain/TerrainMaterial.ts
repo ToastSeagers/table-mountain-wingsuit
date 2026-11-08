@@ -103,6 +103,11 @@ void main() {
   float fyn = smoothstep(0.90, 0.97, slopeY) * smoothstep(220.0, 330.0, h) * (1.0 - rock);
   float sand = smoothstep(0.08, 0.5, h) * (1.0 - smoothstep(4.0, 9.0, h)) * smoothstep(0.975, 0.995, slopeY);
   float water = (1.0 - smoothstep(0.03, 0.3, h)) * (1.0 - clamp(outsideM / 50.0, 0.0, 1.0));
+  // Blank (pure white) aerial coverage on low ground by the sea is a Stage 1 artefact, not land:
+  // shade it as water too. Real surf foam is a little darker than blank and survives.
+  float lumA = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+  float blank = smoothstep(0.72, 0.86, lumA) * (1.0 - smoothstep(4.0, 6.0, h));
+  water = max(water, blank);
   float k = uDetailK;
   // Tints are always on; they are grading, not detail.
   albedo = mix(albedo, albedo * vec3(0.84, 0.88, 0.97), rock * 0.55);
@@ -122,8 +127,15 @@ void main() {
   float ndl = dot(nd, uSunDir);
   float sunTerm = clamp((ndl + 0.2) / 1.2, 0.0, 1.0) * shadow;
   vec3 amb = mix(uGroundAmbient, uSkyAmbient, 0.5 + 0.5 * nd.y);
-  vec3 col = albedo * (amb * 1.6 + uSunColor * sunTerm * 0.75);
-  if (water > 0.0) col = mix(col, waterShade(albedo * 1.3, vWorld), water);
+  vec3 col = albedo * (amb * 1.4 + uSunColor * sunTerm * 0.9);
+  if (water > 0.0) {
+    float landNear = 0.0;
+    for (int i = 0; i < 4; i++) {
+      vec2 o = vec2(i == 0 ? 30.0 : i == 1 ? -30.0 : 0.0, i == 2 ? 30.0 : i == 3 ? -30.0 : 0.0);
+      landNear = max(landNear, smoothstep(0.1, 0.6, H(xz + o)));
+    }
+    col = mix(col, waterShade(cleanSea(albedo, landNear * (1.0 - blank)) * 1.2, vWorld), water);
+  }
 
   gl_FragColor = vec4(applyFog(col, vWorld), 1.0);
   #include <tonemapping_fragment>

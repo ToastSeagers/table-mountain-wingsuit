@@ -1,4 +1,4 @@
-import { Color, Mesh, PlaneGeometry, ShaderMaterial, Vector2, type Vector3 } from 'three';
+import { Mesh, PlaneGeometry, ShaderMaterial, Vector2, type Vector3 } from 'three';
 import type { TerrainBounds } from '../types/terrain';
 import { ATMOSPHERE_GLSL, WATER_GLSL } from './atmosphereGlsl';
 import type { WorldUniforms } from './WorldUniforms';
@@ -29,15 +29,18 @@ ${ATMOSPHERE_GLSL}
 ${WATER_GLSL}
 uniform vec2 uBoundsMin;
 uniform vec2 uBoundsMax;
-uniform vec3 uSeaColor;
 varying vec3 vWorld;
 #include <logdepthbuf_pars_fragment>
 void main() {
   #include <logdepthbuf_fragment>
   // Inside the data the terrain draws its own sea; no overlap means no z-fighting.
   if (all(greaterThan(vWorld.xz, uBoundsMin)) && all(lessThan(vWorld.xz, uBoundsMax))) discard;
-  vec3 c = waterShade(uSeaColor, vWorld);
-  gl_FragColor = vec4(applyFog(c, vWorld), 1.0);
+  vec3 c = applyFog(waterShade(uOpenSea, vWorld), vWorld);
+  // Fade fully into the fog colour before the plane's edge so it meets the sky's horizon.
+  vec3 d = vWorld - cameraPosition;
+  float dist = length(d);
+  c = mix(c, fogColorFor(d / dist), smoothstep(0.55 * SEA_R, 0.95 * SEA_R, dist));
+  gl_FragColor = vec4(c, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }
@@ -49,14 +52,15 @@ export class Sea {
   private readonly material: ShaderMaterial;
 
   constructor(uniforms: WorldUniforms, bounds: TerrainBounds) {
+    uniforms.uOpenSea.value.setHex(OPEN_SEA_SRGB);
     this.material = new ShaderMaterial({
       vertexShader: vertex,
       fragmentShader: fragment,
+      defines: { SEA_R: SEA_HALF_SIZE_M.toFixed(1) },
       uniforms: {
         ...uniforms,
         uBoundsMin: { value: new Vector2(bounds.minX, bounds.minZ) },
         uBoundsMax: { value: new Vector2(bounds.maxX, bounds.maxZ) },
-        uSeaColor: { value: new Color().setHex(OPEN_SEA_SRGB) },
       },
     });
     const geom = new PlaneGeometry(SEA_HALF_SIZE_M * 2, SEA_HALF_SIZE_M * 2, 8, 8);

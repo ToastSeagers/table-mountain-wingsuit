@@ -80,8 +80,8 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   maxPixelRatio: 1,
   sun: { azimuthDeg: 290, elevationDeg: 15, intensity: 1 },
   fog: {
-    colour: 0xa9b8c6,
-    sunColour: 0xf2c79a,
+    colour: 0xaeb8c2,
+    sunColour: 0xf6bf86,
     densityPerM: 0.00012,
     heightFalloffM: 260,
     baseHeightM: 200,
@@ -91,7 +91,7 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   },
   sky: {
     zenithColour: 0x3f6fa8,
-    horizonColour: 0xd9dde0,
+    horizonColour: 0xe8d6bf,
     cloudCover: 0.35,
     sunDiscDeg: 0.6,
   },

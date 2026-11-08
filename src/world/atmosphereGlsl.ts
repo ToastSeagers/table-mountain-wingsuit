@@ -44,21 +44,32 @@ vec3 applyFog(vec3 col, vec3 worldPos) {
   return mix(col, fogColorFor(rd), fogAmount(cameraPosition, rd, dist));
 }
 
-// Sky without the sun disc and clouds: used for water reflections and by the dome.
+// Sky without the sun disc and clouds: used for water reflections and by the dome. At the
+// horizon it is exactly the fog colour, so fully fogged sea and land meet it without a line.
 vec3 skyColor(vec3 rd) {
   float t = clamp(rd.y, 0.0, 1.0);
-  vec3 horizon = mix(uSkyHorizon, fogColorFor(rd), 0.6);
-  vec3 c = mix(horizon, uSkyZenith, pow(smoothstep(0.0, 0.6, t), 0.6));
+  vec3 fogc = fogColorFor(rd);
+  vec3 upper = mix(uSkyHorizon, uSkyZenith, pow(smoothstep(0.0, 0.65, t), 0.7));
   // Warm band low over the sun's side.
-  float sunSide = pow(max(dot(normalize(vec3(rd.x, 0.0, rd.z) + 1e-5), normalize(vec3(uSunDir.x, 0.0, uSunDir.z))), 0.0), 3.0);
-  c += uFogSunColor * sunSide * (1.0 - smoothstep(0.0, 0.25, t)) * 0.35;
-  return rd.y < 0.0 ? fogColorFor(rd) : c;
+  vec3 flat_ = normalize(vec3(rd.x, 0.0, rd.z) + vec3(1e-5, 0.0, 0.0));
+  vec3 sunFlat = normalize(vec3(uSunDir.x, 0.0, uSunDir.z) + vec3(1e-5, 0.0, 0.0));
+  float sunSide = pow(max(dot(flat_, sunFlat), 0.0), 3.0);
+  upper += uFogSunColor * sunSide * (1.0 - smoothstep(0.0, 0.3, t)) * 0.3;
+  return mix(fogc, upper, smoothstep(0.0, 0.2, t));
 }
 `;
 
 /** Water shading shared by the terrain's sea cells and the sea plane outside the data. */
 export const WATER_GLSL = /* glsl */ `
 uniform sampler2D uDetail;
+uniform vec3 uOpenSea;
+
+// Stage 1 leaves a few blank-coverage white blobs in the aerial's sea; replace near-white water
+// pixels with the open-sea colour unless land is close (where white is real surf).
+vec3 cleanSea(vec3 albedo, float landNear) {
+  float lum = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+  return mix(albedo, uOpenSea, smoothstep(0.25, 0.55, lum) * (1.0 - landNear));
+}
 
 vec3 waterShade(vec3 bodyColor, vec3 worldPos) {
   vec2 p = worldPos.xz;
