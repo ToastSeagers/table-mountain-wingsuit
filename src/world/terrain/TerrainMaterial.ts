@@ -111,6 +111,18 @@ void main() {
   // shade it as water too. Real surf foam is a little darker than blank and survives.
   float lumA = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
   float blank = smoothstep(0.72, 0.86, lumA) * (1.0 - smoothstep(4.0, 6.0, h));
+  // Grey-white blocks (the Clifton patch near x -3300) sit under the 0.72 threshold: low saturation,
+  // pale, and under 4 m. They only count as blank away from land, where white would be real surf.
+  float sat = max(max(albedo.r, albedo.g), albedo.b) - min(min(albedo.r, albedo.g), albedo.b);
+  float greyBlank = smoothstep(0.45, 0.6, lumA) * (1.0 - smoothstep(0.04, 0.1, sat)) * (1.0 - smoothstep(3.0, 5.0, h));
+  float landNear = 0.0;
+  if (water > 0.0 || greyBlank > 0.0) {
+    for (int i = 0; i < 4; i++) {
+      vec2 o = vec2(i == 0 ? 30.0 : i == 1 ? -30.0 : 0.0, i == 2 ? 30.0 : i == 3 ? -30.0 : 0.0);
+      landNear = max(landNear, smoothstep(0.1, 0.6, H(xz + o)));
+    }
+  }
+  blank = max(blank, greyBlank * (1.0 - landNear));
   water = max(water, blank);
   float k = uDetailK;
   // Tints are always on; they are grading, not detail.
@@ -133,11 +145,6 @@ void main() {
   vec3 amb = mix(uGroundAmbient, uSkyAmbient, 0.5 + 0.5 * nd.y);
   vec3 col = albedo * (amb * 1.4 + uSunColor * sunTerm * 0.9);
   if (water > 0.0) {
-    float landNear = 0.0;
-    for (int i = 0; i < 4; i++) {
-      vec2 o = vec2(i == 0 ? 30.0 : i == 1 ? -30.0 : 0.0, i == 2 ? 30.0 : i == 3 ? -30.0 : 0.0);
-      landNear = max(landNear, smoothstep(0.1, 0.6, H(xz + o)));
-    }
     col = mix(col, waterShade(cleanSea(albedo, landNear * (1.0 - blank)) * 1.2, vWorld), water);
   }
 

@@ -47,6 +47,9 @@ export interface GameOptions {
   startExit?: string | null;
 }
 
+/** Pixel-ratio factor for the replay behind the results panel (Gate 5 saw 7 ms GPU there vs under 2 ms elsewhere). */
+const RESULTS_RENDER_SCALE = 0.75;
+
 /** Seconds the landing cam holds after a clean touchdown before the results. */
 const LANDED_HOLD_S = 2.8;
 const CRASH_HOLD_S = 0.45;
@@ -318,6 +321,8 @@ export class Game {
   private onState(to: GameState, from: GameState): void {
     this.bus.emit('state', { from, to });
     this.stopReplay();
+    // The results panel hides most of the frame behind scanlines, so the replay renders lighter.
+    this.world.setRenderScale(to === 'results' ? RESULTS_RENDER_SCALE : 1);
     const sc = this.screens;
     for (const s of Object.values(sc)) s.hide();
     this.ui.classList.remove('black-bg');

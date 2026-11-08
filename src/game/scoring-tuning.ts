@@ -17,10 +17,10 @@ export const SCORING = {
   },
   proximity: {
     /** Under this AGL and over this airspeed, proximity accrues. */
-    aglBelowM: 40,
+    aglBelowM: 50,
     airspeedAboveMps: 35,
-    /** Scale on dt * airspeed * (40 - agl) / 40. */
-    gain: 2.5,
+    /** Scale on dt * airspeed * (aglBelowM - agl) / aglBelowM. */
+    gain: 4,
     cap: 5000,
   },
   landing: {

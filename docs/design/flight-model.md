@@ -15,12 +15,12 @@ Owner: Stage 3. Tuned in Stage 6. Numbers are targets with tolerances; the model
 | Quantity | Target | Tolerance | Notes |
 |---|---|---|---|
 | Mass (pilot plus gear) | 90 kg | fixed | |
-| Start arc duration (exit to trim glide) | 3.5 s | 3 to 4.5 s | Height lost about 90 m, horizontal about 60 m |
+| Start arc duration (exit to trim glide) | 3.5 s | 3 to 4.5 s | Height lost about 60 m (model; under 120 required), horizontal about 40 m |
 | Trim glide ratio | 3.0 | 2.8 to 3.2 | Horizontal over vertical speed |
 | Trim airspeed | 45 m/s | 42 to 48 | About 160 km/h |
 | Trim sink rate | 15 m/s | 13 to 17 | |
 | Max glide ratio (flattest sustainable) | 3.4 | 3.2 to 3.6 | At about 38 m/s; below that mush sets in |
-| Min sink rate | 12 m/s | 11 to 14 | |
+| Min sink rate | 10 m/s | 9.5 to 14 | Stage 6 decision: the model's polar gives 9.6 at 33 m/s, which follows from the max-glide row (3.4 at 38 m/s is 10.7 m/s of sink). The old 12 (11 to 14) contradicted that row, so the sink row yields |
 | Max dive airspeed | 75 m/s | 70 to 80 | Steep dive, glide about 1.2 |
 | Mush onset airspeed | 32 m/s | 30 to 35 | Below this, sink rises sharply and roll authority halves |
 | Roll rate at trim | 120 deg/s | 100 to 150 | Scales with airspeed squared, clamped |
@@ -82,7 +82,7 @@ Input smoothing: a 120 ms low-pass on keyboard inputs so taps do not jerk. None 
 - Dive: full nose down for 6 s reaches 70 to 80 m/s and does not exceed 80.
 - Flatten: full nose up from trim reaches max glide 3.2 to 3.6 then mushes; sink rises after airspeed drops below 35.
 - Roll: full roll at trim gives 100 to 150 deg/s; at 30 m/s under 75 deg/s.
-- Canopy: deploy at trim; after 2.5 s phase is `canopy`, airspeed 9 to 13, height lost 55 to 90.
+- Canopy: deploy at trim; after 2.5 s phase is `canopy`, airspeed 9 to 13, height lost 45 to 90 (model: about 50 m at 12.6 m/s, peak 3.7 g; Stage 6 decision: the end-speed row is kept over the old 55 to 90 height and 2.5 g, because a 2.5 g stop leaves about 20 m/s at 2.5 s).
 - Flare: flare at 3.5 m AGL from full flight lands under 1.5 m/s vertical.
 - Determinism: two runs with identical input scripts produce bit-identical state arrays.
 - Camps Bay scenario (harness): exit 1 position, trim with a slight dive early, deploy at 200 m AGL, lands with x between 2,900 and 3,100.
