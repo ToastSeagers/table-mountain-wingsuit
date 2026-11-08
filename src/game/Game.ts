@@ -529,7 +529,7 @@ export class Game {
     });
     this.run.onPhase((from, to) => this.bus.emit('phase', { from, to }));
     this.run.start();
-    this.autopilot = this.auto ? new Autopilot({ target: this.autopilotTarget(sel.exit) }) : null;
+    this.autopilot = this.auto ? new Autopilot({ target: this.autopilotTarget(sel.exit), deployAglM: 45 }) : null;
     this.countdownT = 0;
     this.countdownShown = -1;
     this.countdownWaitedS = 0;
