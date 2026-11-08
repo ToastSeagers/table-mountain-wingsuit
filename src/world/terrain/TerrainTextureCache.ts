@@ -8,11 +8,12 @@ import {
 } from 'three';
 import type { TerrainMeta, TileCoord } from './TerrainMeta';
 import { PRIORITY_PRELOAD, TileAbortedError, type TileLoader } from './TileLoader';
+import { DEFAULT_TEXTURE_UPLOADS_PER_FRAME } from '../WorldSettings';
 
 /** Seconds a newly uploaded tile takes to cross-fade in over the overview. */
 export const TILE_FADE_S = 0.3;
-/** GPU uploads per frame: a 1024 px tile plus mips costs 1 to 3 ms. */
-export const UPLOADS_PER_FRAME = 2;
+/** Default GPU uploads per frame: a 1024 px tile plus mips costs 1 to 3 ms on a desktop. Runtime setting: `uploadsPerFrame`. */
+export const UPLOADS_PER_FRAME = DEFAULT_TEXTURE_UPLOADS_PER_FRAME;
 
 interface Entry {
   col: number;
@@ -36,11 +37,13 @@ export interface TextureCacheStats {
 
 /**
  * GPU residency for the 80 texture tiles: LRU-capped, pinned tiles (preloads) never evicted,
- * at most UPLOADS_PER_FRAME uploads per frame. The overview is loaded once and always resident.
+ * at most `uploadsPerFrame` uploads per frame. The overview is loaded once and always resident.
  */
 export class TerrainTextureCache {
   overview: Texture | null = null;
   maxResident: number;
+  /** Uploads allowed per `update()`; the terrain raises it while the countdown holds (a loading screen). */
+  uploadsPerFrame = UPLOADS_PER_FRAME;
   private readonly entries = new Map<number, Entry>();
   private evicted = 0;
   private anisotropy = 8;
@@ -77,6 +80,12 @@ export class TerrainTextureCache {
     return { resident, loading, awaitingUpload, evicted: this.evicted };
   }
 
+  /** True when no tile is still downloading, decoding or waiting for its GPU upload. */
+  isIdle(): boolean {
+    for (const e of this.entries.values()) if (e.state !== 'ready') return false;
+    return true;
+  }
+
   /** Texture for a tile index if uploaded, else null. */
   get(index: number): Texture | null {
     const e = this.entries.get(index);
@@ -97,8 +106,9 @@ export class TerrainTextureCache {
   update(wanted: Map<number, number>, frame: number, nowS: number, renderer: WebGLRenderer): void {
     // Never want more than fits; keep the most urgent.
     let keep = wanted;
-    const pinned = [...this.entries.values()].filter((e) => e.pins > 0).length;
-    const room = Math.max(this.maxResident - pinned, 0);
+    // Pinned tiles that are also wanted already sit inside `keep`; only the others take room off the cap.
+    const pinnedElsewhere = [...this.entries.values()].filter((e) => e.pins > 0 && !wanted.has(e.index)).length;
+    const room = Math.max(this.maxResident - pinnedElsewhere, 0);
     if (wanted.size > room) {
       keep = new Map([...wanted.entries()].sort((a, b) => a[1] - b[1] || a[0] - b[0]).slice(0, room));
     }
@@ -118,7 +128,7 @@ export class TerrainTextureCache {
     const decoded = [...this.entries.values()]
       .filter((e) => e.state === 'decoded')
       .sort((a, b) => (keep.get(a.index) ?? (a.pins > 0 ? -1 : 1e12)) - (keep.get(b.index) ?? (b.pins > 0 ? -1 : 1e12)));
-    for (const e of decoded.slice(0, UPLOADS_PER_FRAME)) {
+    for (const e of decoded.slice(0, this.uploadsPerFrame)) {
       const tex = this.makeTexture(e.bitmap as ImageBitmap);
       renderer.initTexture(tex);
       // The GPU copy is all we need; free the decoded 4 MB bitmap.
@@ -130,6 +140,15 @@ export class TerrainTextureCache {
       for (const w of e.waiters.splice(0)) w();
     }
     this.evict(frame);
+  }
+
+  /** Releases every pin (the countdown's preload) so those tiles age out like any other once the flight starts. */
+  unpinAll(): void {
+    for (const e of this.entries.values()) {
+      e.pins = 0;
+      // A preload still waiting on this tile must not hang for ever now that nothing keeps the tile alive.
+      for (const w of e.waiters.splice(0)) w();
+    }
   }
 
   /** Loads and pins tiles until `unpin`; resolves when all are uploaded. */

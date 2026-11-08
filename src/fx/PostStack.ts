@@ -374,6 +374,42 @@ export class PostStack {
     this.renderer.render(this.quad, this.cam);
   }
 
+  /**
+   * Compiles the scene's materials (hidden ones too: the canopy) and this stack's own passes ahead of
+   * the first frame that draws them, bound to the same render targets they will draw into, because
+   * Three picks the tone-mapping and colour-space variant of a program from the bound target.
+   * Resolves once the GPU reports every program ready (immediately where parallel compile is absent).
+   */
+  precompile(scene: Scene, camera: Camera): Promise<void> {
+    const r = this.renderer;
+    const prev = r.getRenderTarget();
+    const jobs: Promise<unknown>[] = [];
+    try {
+      if (!this.enabled) {
+        r.setRenderTarget(null);
+        jobs.push(r.compileAsync(scene, camera));
+      } else {
+        r.getDrawingBufferSize(this.size);
+        if (!this.sceneRT || this.size.x !== this.w || this.size.y !== this.h) this.allocate(this.size.x, this.size.y);
+        const fx = this.activeEffects();
+        r.setRenderTarget(this.sceneRT);
+        jobs.push(r.compileAsync(scene, camera));
+        const pass = (mat: ShaderMaterial, target: WebGLRenderTarget | null): void => {
+          this.quad.material = mat;
+          r.setRenderTarget(target);
+          jobs.push(r.compileAsync(this.quad, this.cam));
+        };
+        const levels = fx.bloom || fx.shafts ? this.mips.length : 0;
+        if (levels > 0) pass(this.bright, this.mips[0]);
+        if (levels > 1) pass(this.down, this.mips[1]);
+        pass(this.composite, null);
+      }
+    } finally {
+      r.setRenderTarget(prev);
+    }
+    return Promise.all(jobs).then(() => undefined);
+  }
+
   /** Renders `scene` through the stack to the screen. */
   render(scene: Scene, camera: Camera, p: PostParams): void {
     const r = this.renderer;

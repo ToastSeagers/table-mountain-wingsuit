@@ -56,9 +56,13 @@ export interface WorldSettings {
   shadowExtentM: number;
   /** Renderer tone-mapping exposure. */
   exposure: number;
+  /** Chunk geometries built per frame during flight (about 0.1 ms each on a desktop, several times that on a phone). */
+  geometryBuildsPerFrame: number;
+  /** Texture tiles uploaded to the GPU per frame during flight (1 to 3 ms each on a desktop). */
+  textureUploadsPerFrame: number;
   /** Cap on devicePixelRatio. */
   maxPixelRatio: number;
-  /** Fraction of the capped pixel ratio actually rendered (the mobile preset renders at 0.65). */
+  /** Fraction of the capped pixel ratio actually rendered. */
   renderScale: number;
   sun: SunParams;
   fog: FogParams;
@@ -71,6 +75,10 @@ export type WorldSettingsPatch = Partial<Omit<WorldSettings, 'sun' | 'fog' | 'sk
   sky?: Partial<SkyParams>;
 };
 
+/** Desktop streaming budgets (Stage 2 measurements); the mobile preset spreads the same work over more frames. */
+export const DEFAULT_GEOMETRY_BUILDS_PER_FRAME = 12;
+export const DEFAULT_TEXTURE_UPLOADS_PER_FRAME = 2;
+
 export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   maxResidentTextureTiles: 40,
   lodErrorPx: 2,
@@ -79,6 +87,8 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   shadowMapSize: 4096,
   shadowExtentM: 4000,
   exposure: 1.0,
+  geometryBuildsPerFrame: DEFAULT_GEOMETRY_BUILDS_PER_FRAME,
+  textureUploadsPerFrame: DEFAULT_TEXTURE_UPLOADS_PER_FRAME,
   maxPixelRatio: 1,
   renderScale: 1,
   sun: { azimuthDeg: 290, elevationDeg: 15, intensity: 1 },

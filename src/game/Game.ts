@@ -3,7 +3,7 @@ import { FixedStepLoop } from '../core/FixedStepLoop';
 import { autoQuality, readDeviceEnv, wantsTouchUi } from '../core/device';
 import { InputManager } from '../core/InputManager';
 import { Persistence } from '../core/Persistence';
-import { SettingsStore, type QualityPreset, type Settings } from '../core/Settings';
+import { SettingsStore, type Settings } from '../core/Settings';
 import type { NavEvent } from '../core/inputMapping';
 import type { SurfaceKind } from '../audio/Canopy';
 import { GameAudio } from '../audio/GameAudio';
@@ -30,10 +30,12 @@ import { measurementViewpoints } from '../world/viewpoints';
 import { World } from '../world/World';
 import { Autopilot } from './Autopilot';
 import { CameraRig, type CameraMode, type CameraPose, type CameraSubject } from './CameraRig';
+import { CountdownGate } from './CountdownGate';
 import { ExitRegistry, type ExitDef } from './ExitRegistry';
 import { GameStateMachine, type GameEvent, type GameState } from './GameStateMachine';
 import { LandingZoneRegistry } from './LandingZoneRegistry';
 import { Profile } from './Profile';
+import { QUALITY } from './qualityPresets';
 import { ReplayPlayer } from './Replay';
 import { RunController, type RunOutcome, type RunPose } from './RunController';
 import { TriggerRegistry } from './TriggerRegistry';
@@ -58,26 +60,11 @@ const RESULTS_RENDER_SCALE = 0.75;
 const LANDED_HOLD_S = 2.8;
 const CRASH_HOLD_S = 0.45;
 const COUNTDOWN_STEP_S = 0.9;
-/** How long an unfinished terrain preload may hold the countdown on "3" before we fly anyway. */
-const PRELOAD_WAIT_MAX_S = 6;
 const PRELOAD_RADIUS_M = 3000;
+/** The second warm-up pose: roughly where the camera is a few seconds after the jump (ahead along the exit heading, lower). */
+const WARM_AHEAD_M = 400;
+const WARM_DROP_M = 120;
 const GO_BANNER_S = 0.9;
-
-const QUALITY: Record<QualityPreset, Parameters<World['applySettings']>[0]> = {
-  low: { maxTerrainTriangles: 300_000, lodErrorPx: 4, maxResidentTextureTiles: 24, shadows: false, maxPixelRatio: 1, renderScale: 1 },
-  medium: { maxTerrainTriangles: 560_000, lodErrorPx: 2, maxResidentTextureTiles: 40, shadows: false, maxPixelRatio: 1, renderScale: 1 },
-  high: { maxTerrainTriangles: 560_000, lodErrorPx: 2, maxResidentTextureTiles: 40, shadows: true, maxPixelRatio: 1, renderScale: 1 },
-  // Stage 7. Owner's Mali-G78 held 60 fps on the medium preset at 1x CSS pixels (360x643), so this is
-  // loosened from the brief's 200k / 0.6 for thermal headroom: 1.5x pixel cap at 0.8 scale = 1.2x CSS px.
-  mobile: {
-    maxTerrainTriangles: 300_000,
-    lodErrorPx: 3,
-    maxResidentTextureTiles: 24,
-    shadows: false,
-    maxPixelRatio: 1.5,
-    renderScale: 0.8,
-  },
-};
 
 function yawQuat(headingDeg: number): Quat {
   // Forward is -Z at identity; heading h should face (sin h, 0, -cos h): rotate about +Y by -h.
@@ -135,7 +122,10 @@ export class Game {
   private introT = 0;
   private countdownT = 0;
   private countdownShown = -1;
-  private countdownWaitedS = 0;
+  private readonly gate = new CountdownGate();
+  /** Shader programs for everything the flight draws are compiled (set by the countdown's precompile). */
+  private shadersReady = false;
+  private warmToken = 0;
   private preloads = new Map<string, Promise<void>>();
   private preloaded = new Set<string>();
   private focusedExit: ExitDef | null = null;
@@ -343,6 +333,8 @@ export class Game {
   private onState(to: GameState, from: GameState): void {
     this.bus.emit('state', { from, to });
     this.stopReplay();
+    // The warm-up lasts exactly as long as the countdown; flight budgets apply from GO.
+    if (to !== 'countdown') this.world.terrain.endWarmup();
     // The results panel hides most of the frame behind scanlines, so the replay renders lighter.
     this.world.setRenderScale(to === 'results' ? RESULTS_RENDER_SCALE : 1);
     const sc = this.screens;
@@ -383,6 +375,8 @@ export class Game {
       case 'flying':
         this.beginFlying();
         sc.hud.show();
+        this.world.terrain.releasePreload();
+        this.overlay?.markFlightStart(this.world.terrain.stats);
         break;
       case 'results':
         this.beginResults();
@@ -629,7 +623,7 @@ export class Game {
     this.autopilot = this.auto ? new Autopilot({ target: this.autopilotTarget(sel.exit), deployAglM: 45 }) : null;
     this.countdownT = 0;
     this.countdownShown = -1;
-    this.countdownWaitedS = 0;
+    this.gate.reset();
     this.endHoldS = -1;
     this.prox = 0;
     this.input.reset();
@@ -640,6 +634,32 @@ export class Game {
     this.avatar.setVisible(true);
     this.world.terrain.sampler.setReadyFocus(sel.exit.position.x, sel.exit.position.z);
     void this.preloadFor(sel.exit);
+    this.beginWarmup(sel.exit, sel.headingDeg);
+  }
+
+  /**
+   * The countdown is a loading screen: lift the streaming budgets, build the chunks and tiles the
+   * live camera and a pose a few seconds down the line will want, and compile every shader the
+   * flight draws (the canopy and its lines are hidden until deploy, so they would otherwise compile mid-air).
+   */
+  private beginWarmup(exit: ExitDef, headingDeg: number): void {
+    const terrain = this.world.terrain;
+    const h = (headingDeg * Math.PI) / 180;
+    const fx = Math.sin(h);
+    const fz = -Math.cos(h);
+    const x = exit.position.x + fx * WARM_AHEAD_M;
+    const z = exit.position.z + fz * WARM_AHEAD_M;
+    const y = Math.max(exit.position.y - WARM_DROP_M, terrain.sampler.peekHeight(x, z) + 60);
+    terrain.beginWarmup([{ position: { x, y, z }, target: { x: x + fx * 1500, y: y - 150, z: z + fz * 1500 } }]);
+    const token = ++this.warmToken;
+    this.shadersReady = false;
+    const done = (): void => {
+      if (token === this.warmToken) this.shadersReady = true;
+    };
+    this.post.precompile(this.world.scene, this.world.camera).then(done, (err: unknown) => {
+      console.warn('shader precompile failed', err);
+      done();
+    });
   }
 
   private autopilotTarget(exit: ExitDef): Vec3 {
@@ -652,10 +672,12 @@ export class Game {
     if (!run) return;
     // Held in portrait on a phone: the rotate prompt is up, so the clock waits for landscape.
     if (this.input.touchUi && this.portrait) return;
-    const ready = this.world.terrain.sampler.isReady();
-    const preloadDone = this.countdownWaitedS > PRELOAD_WAIT_MAX_S || this.preloadSettled();
-    if (!(ready && preloadDone)) {
-      this.countdownWaitedS += dtS;
+    const stage = this.gate.update(dtS, {
+      terrainReady: this.world.terrain.sampler.isReady(),
+      preloadDone: this.preloadSettled(),
+      warmSettled: this.shadersReady && this.world.terrain.isSettled(),
+    });
+    if (stage !== 'go') {
       this.screens.countdown.showWait('LOADING TERRAIN...');
       this.countdownShown = -1;
     } else {
