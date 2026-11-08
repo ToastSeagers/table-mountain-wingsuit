@@ -25,7 +25,7 @@ npm run build && npx vite preview      # http://localhost:4173/table-mountain-wi
 - [x] Bundle split: game 187 kB (64 kB gzip), Three.js 528 kB (131 kB gzip).
 - [x] Base path works: production build served at `/table-mountain-wingsuit/`, fonts, terrain and keyboard flow loaded.
 - [x] Lighthouse performance **97** (local production build, desktop preset, real GPU; mobile preset with software GL scores 71, not representative).
-- [~] **Live URL not verified.** The push of `stage-6-release` to origin (to run the workflow from the branch) was refused by the auto-mode permission classifier as a production deploy, so no workflow run exists, and Lighthouse on the live site was not run. See Known issues.
+- [~] **Live URL not verified.** The workflow ran from `stage-6-release` (run 42470639453): checkout, Node 24, `npm ci` and `npm run build` passed on GitHub; the deploy job was rejected because the `github-pages` environment only allows main. Merge to main and the push deploys it.
 - [~] Results-screen GPU under 4 ms: change made, not measured (pane hidden, timer queries unusable).
 - [~] 60 fps on a second GPU: not measured. First load from sizes: 11.5 MB, about 5 s at 20 Mbps.
 - [~] Firefox and Edge: not checked.
