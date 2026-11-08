@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { FixedStepLoop } from '../core/FixedStepLoop';
 import { MemoryStore, Persistence } from '../core/Persistence';
 import { StubTerrain, STUB_EXIT, STUB_EXIT_HEADING_DEG } from '../flight/stub-terrain';
 import type { FlightInput } from '../types/flight';
@@ -320,5 +321,30 @@ describe('Replay', () => {
     expect(again.bestRun('stub')?.total).toBe(result.total);
     expect(again.bestRun('stub')?.replay.length).toBe(result.replay.length);
     expect(again.bestRunOverall()?.exitId).toBe('stub');
+  });
+});
+
+describe('determinism across frame rates (playtest note 11)', () => {
+  // The same per-step input stream must give the same run whatever the render frame time, because
+  // the simulation only ever advances in fixed steps.
+  function flyAt(frameDtS: number): { total: number; y: number; steps: number } {
+    const run = makeRun();
+    const loop = new FixedStepLoop();
+    let stepIdx = 0;
+    while (stepIdx < 120 * 40 && !run.ended) {
+      loop.advance(frameDtS, (step) => {
+        if (stepIdx >= 120 * 40 || run.ended) return;
+        stepIdx++;
+        const st = run.state;
+        run.stepRaw(step, { pitch: stepIdx < 300 ? -0.3 : 0.1, roll: Math.sin(stepIdx / 200) * 0.4, yaw: 0, action: st.phase === 'wingsuit' && st.aglM < 400, brake: false });
+      });
+    }
+    return { total: run.outcome?.result.total ?? run.state.position.y, y: run.state.position.y, steps: stepIdx };
+  }
+
+  it('is identical at 30, 60 and 144 fps frame times', () => {
+    const a = flyAt(1 / 60);
+    expect(flyAt(1 / 30)).toEqual(a);
+    expect(flyAt(1 / 144)).toEqual(a);
   });
 });

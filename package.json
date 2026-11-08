@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.tools.json",
     "format": "prettier --write .",
-    "harness": "tsx tools/flight-harness.ts"
+    "harness": "tsx tools/flight-harness.ts",
+    "deploy": "gh workflow run pages.yml --ref main"
   },
   "dependencies": {
     "three": "0.187.0"
