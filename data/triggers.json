@@ -1,0 +1,10 @@
+{
+  "_comment": "Style-bonus trigger volumes: axis-aligned boxes in world metres (X east, Y up ASL, Z south). Authored in Stage 4 from the height tiles (tools/flowlines.ts finds the Platteklip gully; tools/track.ts flies the Table line) and checked by flying them. 'gorge' is one volume whose top sits below the gully rims; 'apostles' are three volumes passed in 'order' along the western face above Camps Bay.",
+  "version": 1,
+  "volumes": [
+    { "id": "platteklip-gorge", "bonus": "gorge", "order": 1, "min": { "x": -120, "y": 610, "z": 760 }, "max": { "x": 70, "y": 860, "z": 960 } },
+    { "id": "apostles-1", "bonus": "apostles", "order": 1, "min": { "x": -1300, "y": 500, "z": 640 }, "max": { "x": -900, "y": 1000, "z": 1040 } },
+    { "id": "apostles-2", "bonus": "apostles", "order": 2, "min": { "x": -1800, "y": 350, "z": 560 }, "max": { "x": -1400, "y": 800, "z": 960 } },
+    { "id": "apostles-3", "bonus": "apostles", "order": 3, "min": { "x": -2300, "y": 200, "z": 400 }, "max": { "x": -1900, "y": 650, "z": 800 } }
+  ]
+}
