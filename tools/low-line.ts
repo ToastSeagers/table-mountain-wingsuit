@@ -33,14 +33,12 @@ for (let i = 0; i < 120 * 400 && !run.ended; i++) {
   if (s.phase === 'wingsuit') input.deploy = s.elapsedS > 6 && s.aglM <= Number(deployArg);
   if (s.phase === 'wingsuit' && s.elapsedS > 6) {
     // Follow the ground: match the slope's descent rate, plus a pull toward the target clearance.
-    const sp = Math.hypot(s.velocity.x, s.velocity.z) || 1;
     const gNow = terrain.heightAt(s.position.x, s.position.z);
     let gAhead = -1e9;
     for (const t of [0.5, 1, 1.6]) gAhead = Math.max(gAhead, terrain.heightAt(s.position.x + s.velocity.x * t, s.position.z + s.velocity.z * t));
     const vsGround = (gAhead - gNow) / 1;
     const wantVs = Math.max(-55, Math.min(10, vsGround - (s.aglM - targetAgl) * 0.5));
     input.pitch = Math.max(-1, Math.min(1, 0.1 + 0.05 * (wantVs - s.velocity.y)));
-    void sp;
     if (s.aglM < 40 && s.airspeedMps > 35) lowS += 1 / 120;
   }
   run.step(1 / 120, input);
@@ -52,4 +50,4 @@ for (let i = 0; i < 120 * 400 && !run.ended; i++) {
 }
 const o = run.outcome;
 const r = o?.result;
-console.log(`${o?.reason} ${o?.landingClass} total=${r?.total} dist=${r?.distanceScore} air=${r?.airTimeScore} prox=${r?.proximityScore} landing=${r?.landingScore} bonus=${r?.bonusScore} zone=${r?.landingZoneId} lowS=${lowS.toFixed(1)} bonuses=${r?.styleBonuses.map((b) => b.id).join(',')}`);
+console.log(`${o?.reason} ${o?.landingClass} total=${r?.total} prox=${r?.proximityScore} landing=${r?.landingScore} zone=${r?.landingZoneId} lowS=${lowS.toFixed(1)} bonuses=${r?.styleBonuses.map((b) => b.id).join(',')}`);
