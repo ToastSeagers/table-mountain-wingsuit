@@ -5,12 +5,13 @@ import { el, Screen, type UiContext } from './dom';
 export class IntroScreen extends Screen {
   private readonly name = el('div', 'name');
   private readonly sub = el('div', 'sub');
-  private readonly skip = el('div', 'skip blink', 'ENTER: SKIP');
+  private readonly skip = el('div', 'skip blink');
 
   constructor(ctx: UiContext) {
     super(ctx, 'intro');
     const banner = el('div', 'banner');
     banner.append(this.name, this.sub);
+    this.skip.append(el('span', 'kb-only', 'ENTER: SKIP'), el('span', 'touch-only', 'TAP TO SKIP'));
     this.root.append(banner, this.skip);
   }
 

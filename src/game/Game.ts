@@ -67,15 +67,15 @@ const QUALITY: Record<QualityPreset, Parameters<World['applySettings']>[0]> = {
   low: { maxTerrainTriangles: 300_000, lodErrorPx: 4, maxResidentTextureTiles: 24, shadows: false, maxPixelRatio: 1, renderScale: 1 },
   medium: { maxTerrainTriangles: 560_000, lodErrorPx: 2, maxResidentTextureTiles: 40, shadows: false, maxPixelRatio: 1, renderScale: 1 },
   high: { maxTerrainTriangles: 560_000, lodErrorPx: 2, maxResidentTextureTiles: 40, shadows: true, maxPixelRatio: 1, renderScale: 1 },
-  // Stage 7 (brief 07 section 7). Rendered at 0.65 of the pixel ratio, capped at 2 so a 3x phone does not
-  // pay for 3x pixels. Starting values pending real-phone numbers: see docs/status/stage-7-report.md.
+  // Stage 7. Owner's Mali-G78 held 60 fps on the medium preset at 1x CSS pixels (360x643), so this is
+  // loosened from the brief's 200k / 0.6 for thermal headroom: 1.5x pixel cap at 0.8 scale = 1.2x CSS px.
   mobile: {
-    maxTerrainTriangles: 200_000,
-    lodErrorPx: 4,
-    maxResidentTextureTiles: 16,
+    maxTerrainTriangles: 300_000,
+    lodErrorPx: 3,
+    maxResidentTextureTiles: 24,
     shadows: false,
-    maxPixelRatio: 2,
-    renderScale: 0.65,
+    maxPixelRatio: 1.5,
+    renderScale: 0.8,
   },
 };
 
@@ -460,6 +460,8 @@ export class Game {
   private onAnyPointer(): void {
     this.screens.title.poke();
     if (this.replay?.attract) this.stopReplay();
+    // Touch has no Enter key: a tap skips the flyover.
+    else if (this.input.touchUi && this.machine.state === 'intro' && !this.machine.paused) this.dispatch('SKIP_INTRO');
   }
 
   /** On-screen controls on or off: styling hooks for the whole UI, and the pointer-lock mouse stands down. */
@@ -731,7 +733,7 @@ export class Game {
     if (run.ended) prompt = null;
     else if (st.elapsedS < GO_BANNER_S) prompt = 'GO!';
     else if ((st.phase === 'wingsuit' || st.phase === 'freefall') && st.elapsedS > 12 && st.aglM < 260) prompt = this.input.touchUi ? 'TAP PULL' : this.input.gamepadConnected ? 'A: DEPLOY' : 'SPACE: DEPLOY';
-    else if (st.phase === 'canopy' && st.aglM < 40) prompt = this.input.touchUi ? 'TAP, THEN HOLD FLARE' : this.input.gamepadConnected ? 'HOLD A TO FLARE' : 'TAP SPACE TO FLARE';
+    else if (st.phase === 'canopy' && st.aglM < 40) prompt = this.input.touchUi ? 'HOLD BRAKE, FLARE LOW' : this.input.gamepadConnected ? 'HOLD A TO FLARE' : 'TAP SPACE TO FLARE';
     this.screens.hud.render(
       st,
       {

@@ -1516,7 +1516,24 @@ body.touch-ui,
     margin-top: 0.4rem;
   }
   .title-wrap {
-    gap: 1rem;
+    gap: 0.5rem;
+    padding-bottom: 4rem;
+  }
+  .logo {
+    font-size: min(2.6rem, 6.4vw);
+  }
+  .logo small {
+    font-size: 0.9rem;
+  }
+  .title-wrap .menu {
+    gap: 0;
+  }
+  .disclaimer,
+  .touch-ui .disclaimer {
+    bottom: 0.6rem;
+    font-size: 0.6rem;
+    line-height: 1.6;
+    padding: 0.4rem 0.8rem;
   }
   .countdown {
     gap: 0.8rem;

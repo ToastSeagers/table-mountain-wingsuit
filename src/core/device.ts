@@ -32,10 +32,14 @@ export function wantsTouchUi(env: DeviceEnv, forced: boolean): boolean {
 
 export function readDeviceEnv(): DeviceEnv {
   const scr = typeof screen === 'undefined' ? null : screen;
+  const coarsePointer = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches;
+  // Real phones report maxTouchPoints > 0. DevTools-style touch emulation reports 0 while still
+  // exposing touch events and a coarse pointer, so count that as touch too.
+  const emulated = coarsePointer && 'ontouchstart' in window;
   return {
-    maxTouchPoints: typeof navigator === 'undefined' ? 0 : navigator.maxTouchPoints || 0,
+    maxTouchPoints: (typeof navigator === 'undefined' ? 0 : navigator.maxTouchPoints || 0) || (emulated ? 1 : 0),
     screenWidthPx: scr?.width || window.innerWidth,
     screenHeightPx: scr?.height || window.innerHeight,
-    coarsePointer: typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches,
+    coarsePointer,
   };
 }

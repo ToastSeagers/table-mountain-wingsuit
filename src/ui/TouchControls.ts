@@ -87,7 +87,11 @@ export class TouchControls {
     };
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault();
-      b.setPointerCapture?.(e.pointerId);
+      try {
+        b.setPointerCapture(e.pointerId);
+      } catch {
+        // Synthetic or already-ended pointers cannot be captured; the press still counts.
+      }
       this.input.touchButtons.press(name);
       b.classList.add('down');
     });

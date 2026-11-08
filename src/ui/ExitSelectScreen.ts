@@ -75,11 +75,12 @@ export class ExitSelectScreen extends Screen {
   /** Horizontal swipe anywhere on the screen changes the selected card (brief 07 section 5). */
   private listenForSwipes(): void {
     let start: { id: number; x: number; y: number } | null = null;
-    this.root.addEventListener('pointerdown', (e) => {
-      start = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    // On window: most of this screen is click-through, so a swipe may start or end over the canvas.
+    window.addEventListener('pointerdown', (e) => {
+      start = this.visible ? { id: e.pointerId, x: e.clientX, y: e.clientY } : null;
     });
-    this.root.addEventListener('pointerup', (e) => {
-      if (!start || start.id !== e.pointerId) return;
+    window.addEventListener('pointerup', (e) => {
+      if (!this.visible || !start || start.id !== e.pointerId) return;
       const dx = e.clientX - start.x;
       const dy = e.clientY - start.y;
       start = null;
@@ -87,7 +88,7 @@ export class ExitSelectScreen extends Screen {
       this.swipedAtMs = performance.now();
       this.move(dx < 0 ? 1 : -1);
     });
-    this.root.addEventListener('pointercancel', () => {
+    window.addEventListener('pointercancel', () => {
       start = null;
     });
     // Capture phase: runs before the card's own click handler.
