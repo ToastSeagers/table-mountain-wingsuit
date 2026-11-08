@@ -1,7 +1,7 @@
 import type { NavEvent } from '../core/inputMapping';
 import { el, Menu, Screen, type UiContext } from './dom';
 
-export type TitleChoice = 'jump' | 'scores' | 'settings';
+export type TitleChoice = 'jump' | 'scores' | 'settings' | 'feedback';
 
 /** Seconds of no input on the title before the attract hook fires (look spec section 5). */
 export const ATTRACT_IDLE_S = 30;
@@ -10,7 +10,8 @@ export const DISCLAIMER =
   'FICTIONAL LAUNCH POINTS ON REAL GEOGRAPHY. DO NOT ATTEMPT. BASE JUMPING IS PROHIBITED IN TABLE MOUNTAIN NATIONAL PARK.';
 
 /**
- * Title: logo over the drifting world camera, JUMP / HIGH SCORES / SETTINGS, the disclaimer line.
+ * Title: logo over the drifting world camera, JUMP / HIGH SCORES / SETTINGS (and FEEDBACK while a
+ * tester form is configured), the disclaimer line.
  * After 30 s idle `onIdle` fires so Stage 5 (or the Game's basic replay) can run attract mode.
  */
 export class TitleScreen extends Screen {
@@ -22,6 +23,7 @@ export class TitleScreen extends Screen {
     ctx: UiContext,
     private readonly onChoose: (c: TitleChoice) => void,
     private readonly onIdle: () => void,
+    showFeedback = false,
   ) {
     super(ctx, 'title');
     const wrap = el('div', 'title-wrap');
@@ -33,6 +35,7 @@ export class TitleScreen extends Screen {
         { id: 'jump', label: 'JUMP' },
         { id: 'scores', label: 'HIGH SCORES' },
         { id: 'settings', label: 'SETTINGS' },
+        ...(showFeedback ? [{ id: 'feedback', label: 'FEEDBACK' }] : []),
       ],
       (id) => this.onChoose(id as TitleChoice),
       ctx.bus,

@@ -2,7 +2,7 @@ import type { NavEvent } from '../core/inputMapping';
 import type { RunOutcome } from '../game/RunController';
 import { el, fmtScore, Menu, Screen, type UiContext } from './dom';
 
-export type ResultsChoice = 'continue' | 'again' | 'change' | 'title';
+export type ResultsChoice = 'continue' | 'again' | 'change' | 'title' | 'feedback';
 
 /** Seconds the black WIPEOUT card holds before the tally. */
 export const WIPEOUT_HOLD_S = 1.8;
@@ -42,6 +42,7 @@ export class ResultsScreen extends Screen {
   constructor(
     ctx: UiContext,
     private readonly onChoose: (c: ResultsChoice) => void,
+    private readonly showFeedback = false,
   ) {
     super(ctx, 'results');
     this.menu = new Menu([], (id) => this.onChoose(id as ResultsChoice), ctx.bus);
@@ -89,7 +90,10 @@ export class ResultsScreen extends Screen {
     this.panel.style.visibility = wipe ? 'hidden' : 'visible';
     if (wipe) {
       this.wipeTitle.textContent = '';
-      this.wipeTitle.append(outcome.reason === 'out-of-bounds' ? 'OUT OF BOUNDS' : 'WIPEOUT', el('small', '', 'RUN SCORED ANYWAY'));
+      this.wipeTitle.append(
+        outcome.reason === 'out-of-bounds' ? 'OUT OF BOUNDS' : 'WIPEOUT',
+        el('small', '', 'RUN SCORED ANYWAY'),
+      );
       this.wipeLeftS = WIPEOUT_HOLD_S;
     } else {
       this.wipeLeftS = 0;
@@ -121,7 +125,8 @@ export class ResultsScreen extends Screen {
     }
     const before = line.shown;
     line.shown = Math.min(line.target, line.shown + COUNT_RATE * dtS);
-    const stepped = line.shown >= line.target ? line.target : Math.floor(line.shown / COUNT_STEP) * COUNT_STEP;
+    const stepped =
+      line.shown >= line.target ? line.target : Math.floor(line.shown / COUNT_STEP) * COUNT_STEP;
     line.value.textContent = fmtScore(stepped);
     this.tickCarry += line.shown - before;
     while (this.tickCarry >= 100) {
@@ -169,12 +174,16 @@ export class ResultsScreen extends Screen {
       l.row.classList.remove('hidden');
     }
     this.tallyDone = true;
+    // FEEDBACK sits right after a run, when the opinion is fresh; it opens the form in a new tab and
+    // leaves this screen as it is.
+    const feedback = this.showFeedback ? [{ id: 'feedback', label: 'FEEDBACK' }] : [];
     this.menu.setItems(
       this.qualifies
-        ? [{ id: 'continue', label: 'NEW HIGH SCORE!' }]
+        ? [{ id: 'continue', label: 'NEW HIGH SCORE!' }, ...feedback]
         : [
             { id: 'again', label: 'JUMP AGAIN' },
             { id: 'change', label: 'CHANGE EXIT' },
+            ...feedback,
             { id: 'title', label: 'TITLE' },
           ],
     );

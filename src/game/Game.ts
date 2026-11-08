@@ -21,11 +21,12 @@ import { Hud } from '../ui/Hud';
 import { IntroScreen } from '../ui/IntroScreen';
 import { PauseScreen } from '../ui/PauseScreen';
 import { ResultsScreen } from '../ui/ResultsScreen';
+import { FEEDBACK_FORM, feedbackUrl, type FeedbackContext } from '../ui/feedback';
 import { SettingsScreen } from '../ui/SettingsScreen';
 import { TitleScreen } from '../ui/TitleScreen';
 import { TouchControls } from '../ui/TouchControls';
 import { DevCamera } from '../world/DevCamera';
-import { PerfOverlay } from '../world/PerfOverlay';
+import { gpuName, PerfOverlay } from '../world/PerfOverlay';
 import { measurementViewpoints } from '../world/viewpoints';
 import { World } from '../world/World';
 import { Autopilot } from './Autopilot';
@@ -116,6 +117,9 @@ export class Game {
   private freeCam = false;
   private clockS = 0;
   private lastFrameMs = -1;
+  /** Rendered frames and wall seconds while flying unpaused: the mean fps reported in tester feedback. */
+  private flightFrames = 0;
+  private flightSeconds = 0;
 
   private selected: { exit: ExitDef; headingDeg: number } | null = null;
   private lastInitials = 'AAA';
@@ -130,8 +134,18 @@ export class Game {
   private preloaded = new Set<string>();
   private focusedExit: ExitDef | null = null;
   private autopilot: Autopilot | null = null;
-  private readonly flightInput: FlightInput = { pitch: 0, roll: 0, yaw: 0, deploy: false, flare: false, brake: false };
-  private readonly pose: RunPose = { position: { x: 0, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } };
+  private readonly flightInput: FlightInput = {
+    pitch: 0,
+    roll: 0,
+    yaw: 0,
+    deploy: false,
+    flare: false,
+    brake: false,
+  };
+  private readonly pose: RunPose = {
+    position: { x: 0, y: 0, z: 0 },
+    orientation: { x: 0, y: 0, z: 0, w: 1 },
+  };
   private readonly subject: CameraSubject = {
     position: { x: 0, y: 0, z: 0 },
     velocity: { x: 0, y: 0, z: 0 },
@@ -147,7 +161,13 @@ export class Game {
   private prox = 0;
   private hadPointerLock = false;
   private director: ReplayDirector | null = null;
-  private replay: { player: ReplayPlayer; t: number; hold: number; lastP: Vec3 | null; attract: boolean } | null = null;
+  private replay: {
+    player: ReplayPlayer;
+    t: number;
+    hold: number;
+    lastP: Vec3 | null;
+    attract: boolean;
+  } | null = null;
 
   private constructor(
     readonly world: World,
@@ -172,13 +192,24 @@ export class Game {
       bus: this.bus,
       settings: this.settings,
       flightState: () => (this.run && this.machine.state !== 'title' ? this.run.state : null),
-      worldActive: () => this.machine.state === 'flying' && !this.machine.paused && !this.machine.settingsOpen,
+      worldActive: () =>
+        this.machine.state === 'flying' && !this.machine.paused && !this.machine.settingsOpen,
       surfaceAt: () => this.surfaceAtPilot(),
     });
 
     this.screens = {
-      title: new TitleScreen(ctx, (c) => this.onTitleChoice(c), () => this.startAttract()),
-      scores: new HighScoresScreen(ctx, () => this.exits.exits, this.profile, (c) => this.onScoresChoice(c)),
+      title: new TitleScreen(
+        ctx,
+        (c) => this.onTitleChoice(c),
+        () => this.startAttract(),
+        !!FEEDBACK_FORM.url,
+      ),
+      scores: new HighScoresScreen(
+        ctx,
+        () => this.exits.exits,
+        this.profile,
+        (c) => this.onScoresChoice(c),
+      ),
       exitSelect: new ExitSelectScreen(ctx, {
         exits: () => this.exits.exits,
         zones: () => this.zones.zones,
@@ -194,9 +225,14 @@ export class Game {
       countdown: new CountdownScreen(ctx),
       hud: new Hud(ctx),
       pause: new PauseScreen(ctx, (c) => this.onPauseChoice(c)),
-      results: new ResultsScreen(ctx, (c) => this.onResultsChoice(c)),
+      results: new ResultsScreen(ctx, (c) => this.onResultsChoice(c), !!FEEDBACK_FORM.url),
       entry: new HighScoreEntryScreen(ctx, (i) => this.onInitials(i)),
-      settings: new SettingsScreen(ctx, this.settings, () => this.input.gamepadConnected, () => this.dispatch('CLOSE_SETTINGS')),
+      settings: new SettingsScreen(
+        ctx,
+        this.settings,
+        () => this.input.gamepadConnected,
+        () => this.dispatch('CLOSE_SETTINGS'),
+      ),
     };
     for (const s of Object.values(this.screens)) this.ui.appendChild(s.root);
     this.ui.append(this.touch.root, this.touch.rotate);
@@ -206,15 +242,26 @@ export class Game {
     this.machine.onChange((to, from) => this.onState(to, from));
     this.input.onNav((e) => this.onNav(e));
     this.input.onKey((e) => {
-      if (this.machine.state === 'highScoreEntry' && !this.machine.settingsOpen) this.screens.entry.handleKey(e);
+      if (this.machine.state === 'highScoreEntry' && !this.machine.settingsOpen)
+        this.screens.entry.handleKey(e);
       if (opts.dev) this.onDevKey(e);
     });
-    this.screens.settings.addRow({ kind: 'info', label: 'AUDIO', text: () => (this.audio.engine.running ? 'ON' : 'PRESS ANY KEY') });
-    this.screens.settings.addRow({ kind: 'info', label: 'REDUCED MOTION', text: () => (this.camFx.reducedMotion ? 'ON (OS)' : 'OFF') });
+    this.screens.settings.addRow({
+      kind: 'info',
+      label: 'AUDIO',
+      text: () => (this.audio.engine.running ? 'ON' : 'PRESS ANY KEY'),
+    });
+    this.screens.settings.addRow({
+      kind: 'info',
+      label: 'REDUCED MOTION',
+      text: () => (this.camFx.reducedMotion ? 'ON (OS)' : 'OFF'),
+    });
     this.settings.onChange((s) => this.applySettings(s));
     this.applySettings(this.settings.value);
 
-    window.addEventListener('resize', () => world.resize(opts.container.clientWidth, opts.container.clientHeight));
+    window.addEventListener('resize', () =>
+      world.resize(opts.container.clientWidth, opts.container.clientHeight),
+    );
     world.renderer.domElement.addEventListener('mousedown', () => this.onCanvasClick());
     // A tap is "any key" on the title: it wakes the idle timer and ends the attract replay.
     window.addEventListener('pointerdown', () => this.onAnyPointer(), { passive: true });
@@ -225,9 +272,14 @@ export class Game {
     });
 
     if (opts.dev) {
-      this.devCam = new DevCamera(world.camera, world.renderer.domElement, measurementViewpoints(), (vp) => {
-        void world.terrain.preloadAround(vp.position, 1500);
-      });
+      this.devCam = new DevCamera(
+        world.camera,
+        world.renderer.domElement,
+        measurementViewpoints(),
+        (vp) => {
+          void world.terrain.preloadAround(vp.position, 1500);
+        },
+      );
       this.overlay = new PerfOverlay(world.renderer);
     }
     this.onState('title', 'title');
@@ -287,7 +339,9 @@ export class Game {
           break;
         case 'exitSelect': {
           const e = this.selected?.exit ?? this.focusedExit ?? this.exits.exits[0];
-          this.applyPose(this.rig.orbitPose(this.clockS, e.position, 1300, e.position.y + 380, 120));
+          this.applyPose(
+            this.rig.orbitPose(this.clockS, e.position, 1300, e.position.y + 380, 120),
+          );
           break;
         }
         case 'highScores':
@@ -302,6 +356,10 @@ export class Game {
           break;
         case 'flying':
           this.updateFlying(dtS, paused);
+          if (!paused) {
+            this.flightFrames++;
+            this.flightSeconds += dtS;
+          }
           break;
         case 'results':
           this.updateReplay(dtS);
@@ -342,8 +400,12 @@ export class Game {
     this.ui.classList.remove('black-bg');
     this.input.captureKeys = to === 'highScoreEntry';
     if (to !== 'flying' && to !== 'countdown') this.input.releaseMouse();
-    this.avatar.setVisible(to === 'intro' || to === 'countdown' || to === 'flying' || to === 'results');
-    this.markers.setVisible(to === 'intro' || to === 'countdown' || to === 'flying' || to === 'results');
+    this.avatar.setVisible(
+      to === 'intro' || to === 'countdown' || to === 'flying' || to === 'results',
+    );
+    this.markers.setVisible(
+      to === 'intro' || to === 'countdown' || to === 'flying' || to === 'results',
+    );
     this.applyUiClasses();
     this.syncTouchFlight();
 
@@ -395,7 +457,10 @@ export class Game {
 
   private applyUiClasses(): void {
     const flying = this.machine.state === 'flying' && !this.machine.paused;
-    this.ui.classList.toggle('scanlines', this.settings.value.vhsOverlay && !flying && this.machine.state !== 'countdown');
+    this.ui.classList.toggle(
+      'scanlines',
+      this.settings.value.vhsOverlay && !flying && this.machine.state !== 'countdown',
+    );
   }
 
   private onNav(e: NavEvent): void {
@@ -455,7 +520,8 @@ export class Game {
     this.screens.title.poke();
     if (this.replay?.attract) this.stopReplay();
     // Touch has no Enter key: a tap skips the flyover.
-    else if (this.input.touchUi && this.machine.state === 'intro' && !this.machine.paused) this.dispatch('SKIP_INTRO');
+    else if (this.input.touchUi && this.machine.state === 'intro' && !this.machine.paused)
+      this.dispatch('SKIP_INTRO');
   }
 
   /** On-screen controls on or off: styling hooks for the whole UI, and the pointer-lock mouse stands down. */
@@ -473,7 +539,14 @@ export class Game {
   /** Flight is flown in landscape on a phone: rotating to portrait pauses it behind the rotate prompt. */
   private onOrientation(): void {
     this.syncTouchFlight();
-    if (this.input.touchUi && this.portrait && this.machine.state === 'flying' && !this.machine.paused && !this.run?.ended) this.dispatch('PAUSE');
+    if (
+      this.input.touchUi &&
+      this.portrait &&
+      this.machine.state === 'flying' &&
+      !this.machine.paused &&
+      !this.run?.ended
+    )
+      this.dispatch('PAUSE');
   }
 
   private syncTouchFlight(): void {
@@ -484,9 +557,10 @@ export class Game {
     this.input.setTouchSteerEnabled(this.input.touchUi && live && !this.run?.ended);
   }
 
-  private onTitleChoice(c: 'jump' | 'scores' | 'settings'): void {
+  private onTitleChoice(c: 'jump' | 'scores' | 'settings' | 'feedback'): void {
     if (c === 'jump') this.dispatch('JUMP');
     else if (c === 'scores') this.dispatch('SHOW_SCORES');
+    else if (c === 'feedback') this.openFeedback();
     else this.openSettings();
   }
 
@@ -510,11 +584,44 @@ export class Game {
     this.dispatch('OPEN_SETTINGS');
   }
 
-  private onResultsChoice(c: 'continue' | 'again' | 'change' | 'title'): void {
+  private onResultsChoice(c: 'continue' | 'again' | 'change' | 'title' | 'feedback'): void {
     if (c === 'continue') this.dispatch('ENTER_INITIALS');
     else if (c === 'again') this.dispatch('JUMP_AGAIN');
     else if (c === 'change') this.dispatch('CHANGE_EXIT');
+    else if (c === 'feedback') this.openFeedback();
     else this.dispatch('TO_TITLE');
+  }
+
+  /** What the tester form's technical-details line is built from. */
+  feedbackContext(): FeedbackContext {
+    const canvas = this.world.renderer.domElement;
+    const out = this.run?.outcome;
+    const exit = this.selected?.exit;
+    return {
+      version: __APP_VERSION__,
+      device: this.input.touchUi ? 'phone' : 'desktop',
+      gpu: gpuName(this.world.renderer),
+      userAgent: typeof navigator === 'undefined' ? '' : navigator.userAgent,
+      canvasW: canvas.width,
+      canvasH: canvas.height,
+      renderRatio: this.world.renderer.getPixelRatio(),
+      preset: this.settings.value.quality,
+      run:
+        out && exit
+          ? {
+              exitId: exit.id,
+              score: out.result.total,
+              reason: out.reason,
+              fps: this.flightSeconds > 0 ? this.flightFrames / this.flightSeconds : 0,
+            }
+          : null,
+    };
+  }
+
+  /** Opens the tester form in a new tab, prefilled; the game stays where it is. */
+  private openFeedback(): void {
+    const url = feedbackUrl(FEEDBACK_FORM, this.feedbackContext());
+    if (url) window.open(url, '_blank', 'noopener');
   }
 
   private onInitials(initials: string): void {
@@ -522,7 +629,12 @@ export class Game {
     const exit = this.selected?.exit;
     if (out && exit) {
       this.lastInitials = initials;
-      this.lastRank = this.profile.addScore(exit.id, initials, out.result.total, out.result.recordedAt);
+      this.lastRank = this.profile.addScore(
+        exit.id,
+        initials,
+        out.result.total,
+        out.result.recordedAt,
+      );
       this.bus.emit('fanfare');
     }
     this.dispatch('SCORE_SAVED');
@@ -543,7 +655,13 @@ export class Game {
 
   private focusExit(exit: ExitDef): void {
     this.focusedExit = exit;
-    this.screens.exitSelect.setLoading(!this.world.terrain.sampler.tilesLoadedAround(exit.position.x, exit.position.z, PRELOAD_RADIUS_M));
+    this.screens.exitSelect.setLoading(
+      !this.world.terrain.sampler.tilesLoadedAround(
+        exit.position.x,
+        exit.position.z,
+        PRELOAD_RADIUS_M,
+      ),
+    );
     const p = this.preloadFor(exit);
     void p.then(() => {
       if (this.focusedExit === exit) this.screens.exitSelect.setLoading(false);
@@ -602,7 +720,14 @@ export class Game {
     if (!sel) return;
     this.introT += dtS;
     const dur = sel.exit.intro.durationS;
-    this.applyPose(this.rig.introPose(introEase(this.introT / dur), sel.exit.position, sel.headingDeg, sel.exit.intro.cameraPath));
+    this.applyPose(
+      this.rig.introPose(
+        introEase(this.introT / dur),
+        sel.exit.position,
+        sel.headingDeg,
+        sel.exit.intro.cameraPath,
+      ),
+    );
     this.ledgePose(sel.exit, sel.headingDeg);
     if (this.introT >= dur) this.dispatch('SKIP_INTRO');
   }
@@ -620,7 +745,9 @@ export class Game {
     });
     this.run.onPhase((from, to) => this.bus.emit('phase', { from, to }));
     this.run.start();
-    this.autopilot = this.auto ? new Autopilot({ target: this.autopilotTarget(sel.exit), deployAglM: 45 }) : null;
+    this.autopilot = this.auto
+      ? new Autopilot({ target: this.autopilotTarget(sel.exit), deployAglM: 45 })
+      : null;
     this.countdownT = 0;
     this.countdownShown = -1;
     this.gate.reset();
@@ -650,7 +777,9 @@ export class Game {
     const x = exit.position.x + fx * WARM_AHEAD_M;
     const z = exit.position.z + fz * WARM_AHEAD_M;
     const y = Math.max(exit.position.y - WARM_DROP_M, terrain.sampler.peekHeight(x, z) + 60);
-    terrain.beginWarmup([{ position: { x, y, z }, target: { x: x + fx * 1500, y: y - 150, z: z + fz * 1500 } }]);
+    terrain.beginWarmup([
+      { position: { x, y, z }, target: { x: x + fx * 1500, y: y - 150, z: z + fz * 1500 } },
+    ]);
     const token = ++this.warmToken;
     this.shadersReady = false;
     const done = (): void => {
@@ -709,9 +838,16 @@ export class Game {
   private beginFlying(): void {
     this.loop.reset();
     this.input.reset();
+    this.flightFrames = 0;
+    this.flightSeconds = 0;
     this.headCam = false;
     this.endHoldS = -1;
-    if (this.run) this.screens.hud.render(this.run.state, { score: 0, proximity: 0, prompt: 'GO!', mouseHint: false }, 0);
+    if (this.run)
+      this.screens.hud.render(
+        this.run.state,
+        { score: 0, proximity: 0, prompt: 'GO!', mouseHint: false },
+        0,
+      );
   }
 
   private updateFlying(dtS: number, paused: boolean): void {
@@ -741,7 +877,9 @@ export class Game {
     }
 
     const st = run.state;
-    this.avatar.setVisible(!(this.headCam && st.phase !== 'canopy' && st.phase !== 'deploying' && !run.ended));
+    this.avatar.setVisible(
+      !(this.headCam && st.phase !== 'canopy' && st.phase !== 'deploying' && !run.ended),
+    );
     this.avatar.update(paused ? 0 : dtS, this.pose.position, this.pose.orientation, st.phase);
     this.copySubject(run, this.subject);
     if (!paused) {
@@ -760,15 +898,30 @@ export class Game {
     let prompt: string | null = null;
     if (run.ended) prompt = null;
     else if (st.elapsedS < GO_BANNER_S) prompt = 'GO!';
-    else if ((st.phase === 'wingsuit' || st.phase === 'freefall') && st.elapsedS > 12 && st.aglM < 260) prompt = this.input.touchUi ? 'TAP PULL' : this.input.gamepadConnected ? 'A: DEPLOY' : 'SPACE: DEPLOY';
-    else if (st.phase === 'canopy' && st.aglM < 40) prompt = this.input.touchUi ? 'HOLD BRAKE, FLARE LOW' : this.input.gamepadConnected ? 'HOLD A TO FLARE' : 'TAP SPACE TO FLARE';
+    else if (
+      (st.phase === 'wingsuit' || st.phase === 'freefall') &&
+      st.elapsedS > 12 &&
+      st.aglM < 260
+    )
+      prompt = this.input.touchUi
+        ? 'TAP PULL'
+        : this.input.gamepadConnected
+          ? 'A: DEPLOY'
+          : 'SPACE: DEPLOY';
+    else if (st.phase === 'canopy' && st.aglM < 40)
+      prompt = this.input.touchUi
+        ? 'HOLD BRAKE, FLARE LOW'
+        : this.input.gamepadConnected
+          ? 'HOLD A TO FLARE'
+          : 'TAP SPACE TO FLARE';
     this.screens.hud.render(
       st,
       {
         score: run.tracker.runningScore(st.position),
         proximity: this.prox,
         prompt,
-        mouseHint: !this.input.touchUi && !this.input.pointerLocked && !this.autopilot && st.elapsedS < 30,
+        mouseHint:
+          !this.input.touchUi && !this.input.pointerLocked && !this.autopilot && st.elapsedS < 30,
       },
       paused ? 0 : dtS,
     );
@@ -782,7 +935,8 @@ export class Game {
   private onRunEnded(out: RunOutcome): void {
     const sel = this.selected;
     this.bus.emit('run-end', { reason: out.reason });
-    this.endHoldS = out.reason === 'landed' || out.reason === 'water' ? LANDED_HOLD_S : CRASH_HOLD_S;
+    this.endHoldS =
+      out.reason === 'landed' || out.reason === 'water' ? LANDED_HOLD_S : CRASH_HOLD_S;
     this.input.releaseMouse();
     this.syncTouchFlight();
     if (!sel) return;
@@ -800,8 +954,13 @@ export class Game {
     const out = this.run?.outcome;
     const sel = this.selected;
     if (!out || !sel) return;
-    this.screens.results.present(out, sel.exit.name, this.pendingQualifies, () => this.startReplay(out.result.replay, false));
-    this.ui.classList.toggle('black-bg', out.reason === 'crashed' || out.reason === 'out-of-bounds');
+    this.screens.results.present(out, sel.exit.name, this.pendingQualifies, () =>
+      this.startReplay(out.result.replay, false),
+    );
+    this.ui.classList.toggle(
+      'black-bg',
+      out.reason === 'crashed' || out.reason === 'out-of-bounds',
+    );
   }
 
   private startReplay(frames: RunOutcome['result']['replay'], attract: boolean): void {
@@ -845,7 +1004,8 @@ export class Game {
   private updateReplay(dtS: number): void {
     const r = this.replay;
     if (!r) {
-      if (this.machine.state === 'results') this.applyPose(this.rig.orbitPose(this.clockS, this.orbitCentre()));
+      if (this.machine.state === 'results')
+        this.applyPose(this.rig.orbitPose(this.clockS, this.orbitCentre()));
       return;
     }
     r.t += dtS;
@@ -881,7 +1041,15 @@ export class Game {
     s.bankDeg = 0;
     const cam = this.director
       ? this.director.update(r.t, dtS, s)
-      : this.rig.update(dtS, r.t >= end ? 'landing' : pose.phase === 'canopy' || pose.phase === 'deploying' ? 'canopy' : 'chase', s);
+      : this.rig.update(
+          dtS,
+          r.t >= end
+            ? 'landing'
+            : pose.phase === 'canopy' || pose.phase === 'deploying'
+              ? 'canopy'
+              : 'chase',
+          s,
+        );
     this.applyPose(cam);
     this.avatar.update(dtS, pose.p, pose.q, pose.phase);
   }
@@ -954,12 +1122,19 @@ export class Game {
 
   private onCanvasClick(): void {
     const st = this.machine.state;
-    if ((st === 'flying' || st === 'countdown') && !this.machine.paused && !this.auto && !this.input.touchUi) this.input.requestMouseCapture();
+    if (
+      (st === 'flying' || st === 'countdown') &&
+      !this.machine.paused &&
+      !this.auto &&
+      !this.input.touchUi
+    )
+      this.input.requestMouseCapture();
   }
 
   private onPointerLock(): void {
     const locked = this.input.pointerLocked;
-    if (this.hadPointerLock && !locked && this.machine.state === 'flying' && !this.run?.ended) this.dispatch('PAUSE');
+    if (this.hadPointerLock && !locked && this.machine.state === 'flying' && !this.run?.ended)
+      this.dispatch('PAUSE');
     this.hadPointerLock = locked;
   }
 
@@ -984,7 +1159,8 @@ export class Game {
       if (this.machine.paused) this.dispatch('RESUME');
       const s = this.machine.state;
       if (s === 'title') this.dispatch('JUMP');
-      else if (s === 'highScores' || s === 'intro' || s === 'countdown' || s === 'exitSelect') this.dispatch('BACK');
+      else if (s === 'highScores' || s === 'intro' || s === 'countdown' || s === 'exitSelect')
+        this.dispatch('BACK');
       else if (s === 'highScoreEntry') this.dispatch('SCORE_SAVED');
       else this.dispatch('TO_TITLE');
     }
