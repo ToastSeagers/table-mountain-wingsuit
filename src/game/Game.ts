@@ -1,5 +1,6 @@
 import { EventBus } from '../core/EventBus';
 import { FixedStepLoop } from '../core/FixedStepLoop';
+import { autoQuality, readDeviceEnv, wantsTouchUi } from '../core/device';
 import { InputManager } from '../core/InputManager';
 import { Persistence } from '../core/Persistence';
 import { SettingsStore, type QualityPreset, type Settings } from '../core/Settings';
@@ -22,6 +23,7 @@ import { PauseScreen } from '../ui/PauseScreen';
 import { ResultsScreen } from '../ui/ResultsScreen';
 import { SettingsScreen } from '../ui/SettingsScreen';
 import { TitleScreen } from '../ui/TitleScreen';
+import { TouchControls } from '../ui/TouchControls';
 import { DevCamera } from '../world/DevCamera';
 import { PerfOverlay } from '../world/PerfOverlay';
 import { measurementViewpoints } from '../world/viewpoints';
@@ -45,6 +47,8 @@ export interface GameOptions {
   auto?: boolean;
   /** Skip menus and start this exit's countdown at boot (dev). */
   startExit?: string | null;
+  /** `?touch=1`: show the on-screen touch controls on any device (testing on a desktop browser). */
+  touch?: boolean;
 }
 
 /** Pixel-ratio factor for the replay behind the results panel (Gate 5 saw 7 ms GPU there vs under 2 ms elsewhere). */
@@ -60,9 +64,19 @@ const PRELOAD_RADIUS_M = 3000;
 const GO_BANNER_S = 0.9;
 
 const QUALITY: Record<QualityPreset, Parameters<World['applySettings']>[0]> = {
-  low: { maxTerrainTriangles: 300_000, lodErrorPx: 4, maxResidentTextureTiles: 24, shadows: false },
-  medium: { maxTerrainTriangles: 560_000, lodErrorPx: 2, maxResidentTextureTiles: 40, shadows: false },
-  high: { maxTerrainTriangles: 560_000, lodErrorPx: 2, maxResidentTextureTiles: 40, shadows: true },
+  low: { maxTerrainTriangles: 300_000, lodErrorPx: 4, maxResidentTextureTiles: 24, shadows: false, maxPixelRatio: 1, renderScale: 1 },
+  medium: { maxTerrainTriangles: 560_000, lodErrorPx: 2, maxResidentTextureTiles: 40, shadows: false, maxPixelRatio: 1, renderScale: 1 },
+  high: { maxTerrainTriangles: 560_000, lodErrorPx: 2, maxResidentTextureTiles: 40, shadows: true, maxPixelRatio: 1, renderScale: 1 },
+  // Stage 7 (brief 07 section 7). Rendered at 0.65 of the pixel ratio, capped at 2 so a 3x phone does not
+  // pay for 3x pixels. Starting values pending real-phone numbers: see docs/status/stage-7-report.md.
+  mobile: {
+    maxTerrainTriangles: 200_000,
+    lodErrorPx: 4,
+    maxResidentTextureTiles: 16,
+    shadows: false,
+    maxPixelRatio: 2,
+    renderScale: 0.65,
+  },
 };
 
 function yawQuat(headingDeg: number): Quat {
@@ -79,7 +93,7 @@ function yawQuat(headingDeg: number): Quat {
 export class Game {
   readonly bus = new EventBus();
   readonly persistence = new Persistence();
-  readonly settings = new SettingsStore(this.persistence);
+  readonly settings = new SettingsStore(this.persistence, autoQuality(readDeviceEnv()));
   readonly profile = new Profile(this.persistence);
   readonly exits = ExitRegistry.fromData();
   readonly zones = LandingZoneRegistry.fromData();
@@ -92,6 +106,7 @@ export class Game {
   readonly loop = new FixedStepLoop();
   readonly post: PostStack;
   readonly camFx: CameraEffects;
+  readonly touch: TouchControls;
   readonly audio: GameAudio;
   run: RunController | null = null;
   auto: boolean;
@@ -159,6 +174,7 @@ export class Game {
     this.markers.setVisible(false);
     world.scene.add(this.avatar.group, this.markers.group);
     this.input = new InputManager(world.renderer.domElement);
+    this.touch = new TouchControls(this.input);
     this.post = new PostStack(world.renderer);
     world.renderHook = (scene, camera) => this.post.render(scene, camera, this.postParams());
     this.camFx = new CameraEffects(this.rig, this.bus);
@@ -193,6 +209,9 @@ export class Game {
       settings: new SettingsScreen(ctx, this.settings, () => this.input.gamepadConnected, () => this.dispatch('CLOSE_SETTINGS')),
     };
     for (const s of Object.values(this.screens)) this.ui.appendChild(s.root);
+    this.ui.append(this.touch.root, this.touch.rotate);
+    this.input.onTouchUi((on) => this.applyTouchUi(on));
+    this.input.setTouchUi(wantsTouchUi(readDeviceEnv(), !!opts.touch));
 
     this.machine.onChange((to, from) => this.onState(to, from));
     this.input.onNav((e) => this.onNav(e));
@@ -207,6 +226,9 @@ export class Game {
 
     window.addEventListener('resize', () => world.resize(opts.container.clientWidth, opts.container.clientHeight));
     world.renderer.domElement.addEventListener('mousedown', () => this.onCanvasClick());
+    // A tap is "any key" on the title: it wakes the idle timer and ends the attract replay.
+    window.addEventListener('pointerdown', () => this.onAnyPointer(), { passive: true });
+    window.addEventListener('resize', () => this.onOrientation());
     document.addEventListener('pointerlockchange', () => this.onPointerLock());
     window.addEventListener('blur', () => {
       if (this.machine.state === 'flying') this.dispatch('PAUSE');
@@ -331,6 +353,7 @@ export class Game {
     this.avatar.setVisible(to === 'intro' || to === 'countdown' || to === 'flying' || to === 'results');
     this.markers.setVisible(to === 'intro' || to === 'countdown' || to === 'flying' || to === 'results');
     this.applyUiClasses();
+    this.syncTouchFlight();
 
     switch (to) {
       case 'title':
@@ -434,6 +457,37 @@ export class Game {
     }
   }
 
+  private onAnyPointer(): void {
+    this.screens.title.poke();
+    if (this.replay?.attract) this.stopReplay();
+  }
+
+  /** On-screen controls on or off: styling hooks for the whole UI, and the pointer-lock mouse stands down. */
+  private applyTouchUi(on: boolean): void {
+    document.body.classList.toggle('touch-ui', on);
+    document.documentElement.classList.toggle('touch-ui', on);
+    this.ui.classList.toggle('touch-ui', on);
+    this.syncTouchFlight();
+  }
+
+  private get portrait(): boolean {
+    return window.innerHeight > window.innerWidth;
+  }
+
+  /** Flight is flown in landscape on a phone: rotating to portrait pauses it behind the rotate prompt. */
+  private onOrientation(): void {
+    this.syncTouchFlight();
+    if (this.input.touchUi && this.portrait && this.machine.state === 'flying' && !this.machine.paused && !this.run?.ended) this.dispatch('PAUSE');
+  }
+
+  private syncTouchFlight(): void {
+    const st = this.machine.state;
+    const live = st === 'flying' && !this.machine.paused && !this.machine.settingsOpen;
+    this.ui.classList.toggle('in-flight', st === 'flying' || st === 'countdown');
+    this.touch.setVisible(this.input.touchUi && live && !this.run?.ended);
+    this.input.setTouchSteerEnabled(this.input.touchUi && live && !this.run?.ended);
+  }
+
   private onTitleChoice(c: 'jump' | 'scores' | 'settings'): void {
     if (c === 'jump') this.dispatch('JUMP');
     else if (c === 'scores') this.dispatch('SHOW_SCORES');
@@ -486,6 +540,7 @@ export class Game {
     if (this.machine.settingsOpen && !this.screens.settings.isVisible) this.screens.settings.show();
     if (!this.machine.settingsOpen && this.screens.settings.isVisible) this.screens.settings.hide();
     this.applyUiClasses();
+    this.syncTouchFlight();
   }
 
   // ----- exit select ---------------------------------------------------------------------
@@ -667,21 +722,23 @@ export class Game {
       this.applyPose(this.rig.update(dtS, mode, this.subject));
     }
 
+    this.touch.update(st.phase);
+
     // HUD
     const k = st.aglM < 40 && st.airspeedMps > 35 ? (40 - st.aglM) / 40 : 0;
     this.prox += (k - this.prox) * Math.min(1, dtS * 6);
     let prompt: string | null = null;
     if (run.ended) prompt = null;
     else if (st.elapsedS < GO_BANNER_S) prompt = 'GO!';
-    else if ((st.phase === 'wingsuit' || st.phase === 'freefall') && st.elapsedS > 12 && st.aglM < 260) prompt = this.input.gamepadConnected ? 'A: DEPLOY' : 'SPACE: DEPLOY';
-    else if (st.phase === 'canopy' && st.aglM < 40) prompt = this.input.gamepadConnected ? 'HOLD A TO FLARE' : 'TAP SPACE TO FLARE';
+    else if ((st.phase === 'wingsuit' || st.phase === 'freefall') && st.elapsedS > 12 && st.aglM < 260) prompt = this.input.touchUi ? 'TAP PULL' : this.input.gamepadConnected ? 'A: DEPLOY' : 'SPACE: DEPLOY';
+    else if (st.phase === 'canopy' && st.aglM < 40) prompt = this.input.touchUi ? 'TAP, THEN HOLD FLARE' : this.input.gamepadConnected ? 'HOLD A TO FLARE' : 'TAP SPACE TO FLARE';
     this.screens.hud.render(
       st,
       {
         score: run.tracker.runningScore(st.position),
         proximity: this.prox,
         prompt,
-        mouseHint: !this.input.pointerLocked && !this.autopilot && st.elapsedS < 30,
+        mouseHint: !this.input.touchUi && !this.input.pointerLocked && !this.autopilot && st.elapsedS < 30,
       },
       paused ? 0 : dtS,
     );
@@ -697,6 +754,7 @@ export class Game {
     this.bus.emit('run-end', { reason: out.reason });
     this.endHoldS = out.reason === 'landed' || out.reason === 'water' ? LANDED_HOLD_S : CRASH_HOLD_S;
     this.input.releaseMouse();
+    this.syncTouchFlight();
     if (!sel) return;
     if (out.reason === 'landed' || out.reason === 'water') this.profile.markCompleted(sel.exit.id);
     this.profile.offerBestRun(out.result);
@@ -866,7 +924,7 @@ export class Game {
 
   private onCanvasClick(): void {
     const st = this.machine.state;
-    if ((st === 'flying' || st === 'countdown') && !this.machine.paused && !this.auto) this.input.requestMouseCapture();
+    if ((st === 'flying' || st === 'countdown') && !this.machine.paused && !this.auto && !this.input.touchUi) this.input.requestMouseCapture();
   }
 
   private onPointerLock(): void {

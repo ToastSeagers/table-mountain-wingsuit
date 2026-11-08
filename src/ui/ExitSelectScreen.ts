@@ -6,6 +6,9 @@ import type { TerrainBounds } from '../types/terrain';
 import { el, fmtScore, Screen, type UiContext } from './dom';
 import { posterise } from './posterise';
 
+/** A horizontal drag at least this long (CSS px) is a swipe. */
+const SWIPE_MIN_PX = 48;
+
 export interface ExitSelectDeps {
   exits: () => readonly ExitDef[];
   zones: () => readonly LandingZone[];
@@ -35,6 +38,9 @@ export class ExitSelectScreen extends Screen {
   private altIndex: number[] = [];
   private mapReady = false;
   private loading = false;
+  private readonly dots = el('div', 'dots');
+  /** Time of the last swipe, so the click that ends a mouse swipe does not also pick a card. */
+  private swipedAtMs = -1e9;
 
   constructor(
     ctx: UiContext,
@@ -46,7 +52,55 @@ export class ExitSelectScreen extends Screen {
     left.append(el('h2', 'heading', 'SELECT EVENT'), this.mapBox);
     this.mapBox.appendChild(this.canvas);
     wrap.append(left, this.cardsEl);
-    this.root.append(wrap, this.status);
+    // Touch layout (CSS shows these only on touch): one card at a time, swipe or arrows to change, back button.
+    const prev = this.touchButton('touch-nav prev', '\u25C0', 'Previous exit', () => this.move(-1));
+    const next = this.touchButton('touch-nav next', '\u25B6', 'Next exit', () => this.move(1));
+    const back = this.touchButton('touch-back', 'BACK', 'Back', () => this.handleNav('back'));
+    const nav = el('div', 'es-nav');
+    nav.append(prev, this.dots, next);
+    const footer = el('div', 'es-footer');
+    footer.append(back, this.status, nav);
+    this.root.append(wrap, footer);
+    this.listenForSwipes();
+  }
+
+  private touchButton(cls: string, text: string, label: string, onTap: () => void): HTMLButtonElement {
+    const b = el('button', cls, text);
+    b.type = 'button';
+    b.setAttribute('aria-label', label);
+    b.addEventListener('click', onTap);
+    return b;
+  }
+
+  /** Horizontal swipe anywhere on the screen changes the selected card (brief 07 section 5). */
+  private listenForSwipes(): void {
+    let start: { id: number; x: number; y: number } | null = null;
+    this.root.addEventListener('pointerdown', (e) => {
+      start = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    });
+    this.root.addEventListener('pointerup', (e) => {
+      if (!start || start.id !== e.pointerId) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      start = null;
+      if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      this.swipedAtMs = performance.now();
+      this.move(dx < 0 ? 1 : -1);
+    });
+    this.root.addEventListener('pointercancel', () => {
+      start = null;
+    });
+    // Capture phase: runs before the card's own click handler.
+    this.root.addEventListener(
+      'click',
+      (e) => {
+        if (performance.now() - this.swipedAtMs < 400) {
+          e.stopPropagation();
+          e.preventDefault();
+        }
+      },
+      true,
+    );
   }
 
   /** Rebuilds cards and pins (unlocks and best scores may have changed). */
@@ -111,6 +165,12 @@ export class ExitSelectScreen extends Screen {
     }
   }
 
+  private cycleLine(ev: Event, i: number, dir: number): void {
+    ev.stopPropagation();
+    this.index = i;
+    this.handleNav(dir < 0 ? 'left' : 'right');
+  }
+
   private move(delta: number): void {
     const n = this.d.exits().length;
     this.index = (this.index + delta + n) % n;
@@ -164,7 +224,11 @@ export class ExitSelectScreen extends Screen {
       info.appendChild(el('div', 'blurb', e.blurb));
       if (e.altHeadings.length > 1) {
         const pick = el('div', 'heading-pick');
-        pick.append('◀ LINE: ', el('b', '', e.altHeadings[this.altIndex[i] ?? 0].label.toUpperCase()), ' ▶');
+        const l = el('span', 'arrow', '\u25C0');
+        const r = el('span', 'arrow', '\u25B6');
+        l.addEventListener('click', (ev) => this.cycleLine(ev, i, -1));
+        r.addEventListener('click', (ev) => this.cycleLine(ev, i, 1));
+        pick.append(l, ' LINE: ', el('b', '', e.altHeadings[this.altIndex[i] ?? 0].label.toUpperCase()), ' ', r);
         info.appendChild(pick);
       }
       const best = this.d.profile.bestScore(e.id);
@@ -220,16 +284,24 @@ export class ExitSelectScreen extends Screen {
       if (i >= pinStart) p.classList.toggle('sel', i - pinStart === this.index);
     });
     this.cards[this.index]?.scrollIntoView({ block: 'nearest' });
+    this.dots.textContent = '';
+    this.cards.forEach((_, i) => this.dots.appendChild(el('i', i === this.index ? 'sel' : '')));
     this.paintStatus();
   }
 
   private paintStatus(): void {
     const exit = this.d.exits()[this.index];
+    const touch = document.body.classList.contains('touch-ui');
+    const unlocked = !!exit && this.d.profile.isUnlocked(exit);
     this.status.textContent = this.loading
       ? 'LOADING TERRAIN...'
-      : exit && this.d.profile.isUnlocked(exit)
-        ? 'ARROWS: CHOOSE    ENTER: JUMP    ESC: BACK'
-        : 'LOCKED  -  ARROWS: CHOOSE    ESC: BACK';
+      : touch
+        ? unlocked
+          ? 'SWIPE TO CHOOSE    TAP THE CARD TO JUMP'
+          : 'LOCKED  -  SWIPE TO CHOOSE'
+        : unlocked
+          ? 'ARROWS: CHOOSE    ENTER: JUMP    ESC: BACK'
+          : 'LOCKED  -  ARROWS: CHOOSE    ESC: BACK';
     this.status.classList.toggle('blink', this.loading);
   }
 

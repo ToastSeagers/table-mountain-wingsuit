@@ -41,12 +41,16 @@ export interface PostPreset {
   /** Radial samples for sun shafts (0 = off). */
   shaftSamples: number;
   aberration: boolean;
+  /** Passes this preset forces off regardless of the toggles (the mobile preset keeps tonemap, grade and vignette only). */
+  off?: readonly (keyof PostEffects)[];
 }
 
 export const POST_PRESETS: Record<QualityPreset, PostPreset> = {
   low: { msaa: 2, bloomLevels: 0, shaftSamples: 0, aberration: false },
   medium: { msaa: 4, bloomLevels: 3, shaftSamples: 10, aberration: true },
   high: { msaa: 4, bloomLevels: 5, shaftSamples: 20, aberration: true },
+  // Stage 7: no bloom mips, shafts, aberration or grain; 2x MSAA is cheap on tile-based GPUs.
+  mobile: { msaa: 2, bloomLevels: 0, shaftSamples: 0, aberration: false, off: ['bloom', 'shafts', 'aberration', 'grain'] },
 };
 
 /** Per-frame inputs from the game. */
@@ -383,7 +387,7 @@ export class PostStack {
     const h = this.size.y;
     if (!this.sceneRT || w !== this.w || h !== this.h) this.allocate(w, h);
     const rt = this.sceneRT as WebGLRenderTarget;
-    const fx = this.effects;
+    const fx = this.activeEffects();
 
     // Three skips tone mapping and colour-space encoding on render targets, so the target holds
     // scene-linear HDR and the composite does both.
@@ -437,6 +441,15 @@ export class PostStack {
     u.uTime.value = p.reducedMotion ? 0.37 : p.timeS;
     (u.uRes.value as Vector2).set(w, h);
     this.blit(this.composite, null);
+  }
+
+  /** The toggles with the preset's forced-off passes applied. */
+  private activeEffects(): PostEffects {
+    const off = this.preset.off;
+    if (!off) return this.effects;
+    const fx = { ...this.effects };
+    for (const k of off) fx[k] = false;
+    return fx;
   }
 
   private readonly sunDirTmp = new Vector3();

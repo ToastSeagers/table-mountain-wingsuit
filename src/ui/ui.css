@@ -16,7 +16,7 @@
 
 html {
   /* 16 px at 1080 p; the whole UI is in rem. */
-  font-size: clamp(9px, 1.48vh, 24px);
+  font-size: clamp(10px, min(1.48vh, 2.7vw), 24px);
 }
 
 html,
@@ -186,7 +186,8 @@ p {
 
 .logo {
   text-align: center;
-  font-size: 3.5rem;
+  /* 14 letters across: never wider than the screen (brief 07 section 9). */
+  font-size: min(3.5rem, 6.4vw);
   line-height: 1.25;
   color: var(--c-sun);
   text-shadow:
@@ -199,7 +200,7 @@ p {
 
 .logo small {
   display: block;
-  font-size: 1.5rem;
+  font-size: min(1.5rem, 3.2vw);
   color: var(--c-paper);
   text-shadow: 3px 3px 0 var(--c-ink);
   margin-top: 0.8rem;
@@ -417,6 +418,13 @@ p {
   color: var(--c-paper);
 }
 
+.heading-pick .arrow {
+  cursor: pointer;
+  pointer-events: auto;
+  color: var(--c-sea);
+  padding: 0 0.3rem;
+}
+
 .heading-pick b {
   font-weight: normal;
   color: var(--c-sun);
@@ -455,12 +463,13 @@ p {
 .banner {
   position: absolute;
   left: 4rem;
+  right: 2rem;
   bottom: 4rem;
   max-width: 44rem;
 }
 
 .banner .name {
-  font-size: 2.2rem;
+  font-size: min(2.2rem, 5vw);
   color: var(--c-sun);
   text-shadow: 4px 4px 0 var(--c-coral);
   margin-bottom: 0.7rem;
@@ -507,7 +516,8 @@ p {
 }
 
 .countdown .num.wait {
-  font-size: 2.4rem;
+  font-size: min(2.4rem, 4.8vw);
+  text-align: center;
   animation: blink 0.8s steps(1, end) infinite;
 }
 
@@ -719,7 +729,8 @@ p {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  min-width: 36rem;
+  min-width: 0;
+  width: min(36rem, calc(100vw - 6rem));
 }
 
 .row {
@@ -778,8 +789,10 @@ p {
   right: 3rem;
   top: 50%;
   transform: translateY(-50%);
-  min-width: 34rem;
+  min-width: 0;
+  width: min(34rem, calc(100vw - 2rem));
   max-height: 90vh;
+  overflow-y: auto;
 }
 
 .tally .line {
@@ -848,12 +861,12 @@ p {
 }
 
 .wipeout .card-w {
-  padding: 2rem 4rem;
+  padding: 2rem min(4rem, 4vw);
   background: var(--c-coral);
   color: var(--c-ink);
   border: 6px solid var(--c-paper);
   box-shadow: var(--shadow);
-  font-size: 4rem;
+  font-size: min(4rem, 6vw);
   text-align: center;
   animation: slam 0.3s steps(3, end) both;
 }
@@ -867,7 +880,8 @@ p {
 
 /* ---- High scores ---- */
 .scores-panel {
-  min-width: 36rem;
+  min-width: 0;
+  width: min(36rem, calc(100vw - 2rem));
 }
 
 .scores-panel table {
@@ -909,17 +923,57 @@ p {
   color: var(--c-sun);
 }
 
+.tab-arrow {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  pointer-events: auto;
+  color: var(--c-sea);
+  font-family: inherit;
+  padding: 0.3rem 0.6rem;
+}
+
 /* ---- Initials entry ---- */
 .initials {
   display: flex;
   gap: 1.5rem;
   justify-content: center;
-  margin: 1.5rem 0;
+  margin: 1rem 0;
+}
+
+.slot-col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.4rem;
+}
+
+.letter-arrow {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2rem;
+  min-height: 2rem;
+  font-family: inherit;
+  font-size: 1.2rem;
+  color: var(--c-sea);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.letter-arrow:active {
+  color: var(--c-sun);
+}
+
+.entry-ok {
+  align-items: center;
 }
 
 .initials .slot {
   width: 5rem;
-  height: 6rem;
+  height: 5rem;
   border: 4px solid var(--c-paper);
   background: var(--c-ink);
   font-size: 3.2rem;
@@ -985,5 +1039,489 @@ p {
   }
   .logo {
     font-size: 2rem;
+  }
+}
+
+/* =====================================================================================
+ * Stage 7: phones and touch (brief 07). Everything above stays desktop-first; the rules below
+ * apply when the touch UI is on (a phone, or ?touch=1) or the screen is narrow.
+ * ===================================================================================== */
+
+html.touch-ui {
+  /* 11 px at 375 px tall (landscape phone); portrait is limited by width. */
+  font-size: clamp(10px, min(2.9vh, 2.7vw), 24px);
+}
+
+.touch-only {
+  display: none;
+}
+
+.touch-ui .touch-only {
+  display: inline;
+}
+
+.touch-ui .kb-only {
+  display: none;
+}
+
+.touch-ui .controls.touch-only {
+  display: grid;
+}
+
+body.touch-ui,
+.touch-ui #app canvas {
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Menu rows and cards are 44 px tap targets. */
+.touch-ui .menu button,
+.touch-ui .row,
+.touch-ui .letter-arrow,
+.touch-ui .tab-arrow {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+
+.touch-ui .letter-arrow,
+.touch-ui .tab-arrow {
+  justify-content: center;
+  min-width: 44px;
+}
+
+.touch-ui .initials .slot {
+  min-width: 44px;
+}
+
+.touch-ui .panel {
+  max-height: calc(100dvh - 1.5rem);
+  overflow-y: auto;
+  touch-action: pan-y;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.touch-ui .results .panel.tally {
+  max-height: calc(100dvh - 1rem);
+}
+
+.touch-ui .cards {
+  touch-action: pan-y;
+}
+
+.touch-ui .disclaimer {
+  font-size: 0.85rem;
+}
+
+/* ---- Exit select on touch: one card, swipe or arrows, explicit back ---- */
+.es-footer,
+.es-nav {
+  display: contents;
+}
+
+.touch-nav,
+.touch-back,
+.dots {
+  display: none;
+}
+
+.touch-ui .exit-select {
+  padding: 1rem 1rem 4.4rem;
+  gap: 1rem;
+}
+
+.touch-ui .cards .card:not(.sel) {
+  display: none;
+}
+
+.touch-ui .cards {
+  overflow-y: auto;
+  padding: 0 0.4rem 0.4rem 0;
+}
+
+.touch-ui .card {
+  align-items: center;
+}
+
+.touch-ui .card .blurb {
+  font-size: 0.8rem;
+}
+
+.touch-ui .heading-pick .arrow {
+  display: inline-block;
+  min-width: 44px;
+  min-height: 24px;
+  text-align: center;
+}
+
+.touch-ui .es-footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  background: rgba(27, 18, 48, 0.9);
+  border-top: 4px solid var(--c-paper);
+  pointer-events: none;
+}
+
+.touch-ui .es-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.touch-ui .touch-nav,
+.touch-ui .touch-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  background: var(--c-ink);
+  border: 3px solid var(--c-paper);
+  color: var(--c-sun);
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 0 0.7rem;
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.touch-ui .dots {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.touch-ui .dots i {
+  width: 0.8rem;
+  height: 0.8rem;
+  background: #4d4268;
+  border: 2px solid var(--c-paper);
+}
+
+.touch-ui .dots i.sel {
+  background: var(--c-sun);
+}
+
+.touch-ui .footer-hint {
+  position: static;
+  flex: 1;
+  font-size: 0.6rem;
+  line-height: 1.6;
+}
+
+/* ---- HUD on touch: corners make room for the pause and camera buttons, TIME moves up ---- */
+.touch-ui .hud .tl {
+  top: 0.8rem;
+  left: calc(env(safe-area-inset-left, 0px) + 72px);
+}
+
+.touch-ui .hud .tr {
+  top: 0.8rem;
+  right: calc(env(safe-area-inset-right, 0px) + 72px);
+}
+
+.touch-ui .hud .bl {
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 0.8rem);
+  left: calc(env(safe-area-inset-left, 0px) + 1rem);
+}
+
+.touch-ui .hud .br {
+  top: 0.8rem;
+  bottom: auto;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.touch-ui .hud .corner {
+  font-size: 1.4rem;
+}
+
+.touch-ui .hud .score {
+  top: 4.6rem;
+  right: calc(env(safe-area-inset-right, 0px) + 72px);
+}
+
+.touch-ui .hud .stamps {
+  top: 7.4rem;
+}
+
+.touch-ui .hud .prompt {
+  bottom: 4rem;
+}
+
+.touch-ui .hud .proximity {
+  bottom: 1.2rem;
+  width: min(22rem, 40vw);
+}
+
+/* ---- On-screen flight controls ---- */
+.touch-controls {
+  position: absolute;
+  inset: 0;
+  display: none;
+  pointer-events: none;
+  touch-action: none;
+  --edge-r: calc(max(env(safe-area-inset-right, 0px), 12px) + 8px);
+  --edge-b: calc(max(env(safe-area-inset-bottom, 0px), 8px) + 12px);
+  --pull: max(72px, 9rem);
+}
+
+.touch-controls.show {
+  display: block;
+}
+
+.touch-btn {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  font-family: inherit;
+  background: var(--c-ink);
+  color: var(--c-paper);
+  border: 4px solid var(--c-paper);
+  box-shadow: 4px 4px 0 #000;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.touch-btn.down {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 #000;
+  filter: brightness(1.2);
+}
+
+.touch-btn.pull {
+  right: var(--edge-r);
+  bottom: var(--edge-b);
+  width: var(--pull);
+  height: var(--pull);
+  font-size: 1.3rem;
+  background: var(--c-sun);
+  color: var(--c-ink);
+  border-color: var(--c-ink);
+  outline: 3px solid var(--c-paper);
+}
+
+.touch-btn.pull.flare {
+  background: var(--c-coral);
+}
+
+.touch-btn.pull.gone {
+  display: none;
+}
+
+.touch-btn.brake {
+  display: none;
+  right: var(--edge-r);
+  bottom: calc(var(--edge-b) + var(--pull) + 14px);
+  width: calc(var(--pull) * 0.72);
+  height: 56px;
+  font-size: 0.9rem;
+  color: var(--c-sea);
+}
+
+.touch-btn.brake.on {
+  display: flex;
+}
+
+.touch-btn.pause,
+.touch-btn.cam {
+  top: calc(max(env(safe-area-inset-top, 0px), 0px) + 10px);
+  width: 52px;
+  height: 52px;
+  font-size: 1rem;
+}
+
+.touch-btn.pause {
+  left: calc(max(env(safe-area-inset-left, 0px), 0px) + 12px);
+}
+
+.touch-btn.cam {
+  right: calc(max(env(safe-area-inset-right, 0px), 0px) + 12px);
+  font-size: 0.8rem;
+}
+
+.steer-ring {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 96px;
+  height: 96px;
+  border: 3px dashed rgba(244, 233, 210, 0.7);
+  border-radius: 50%;
+  display: none;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.steer-ring.on {
+  display: block;
+}
+
+.steer-ring.holding {
+  border-color: var(--c-sun);
+}
+
+.steer-knob {
+  position: absolute;
+  left: calc(50% - 16px);
+  top: calc(50% - 16px);
+  width: 32px;
+  height: 32px;
+  background: var(--c-sun);
+  border: 3px solid var(--c-ink);
+  outline: 2px solid var(--c-paper);
+}
+
+/* ---- Rotate prompt: flight is flown in landscape ---- */
+.rotate-prompt {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2rem;
+  text-align: center;
+  background: var(--c-ink);
+  color: var(--c-paper);
+  pointer-events: auto;
+  padding: 2rem;
+}
+
+.rotate-prompt .rot-icon {
+  font-size: 6rem;
+  color: var(--c-sun);
+  line-height: 1;
+}
+
+.rotate-prompt p {
+  font-size: 1.4rem;
+  color: var(--c-sun);
+}
+
+.rotate-prompt small {
+  font-size: 0.8rem;
+}
+
+@media (orientation: portrait) {
+  #ui.touch-ui.in-flight .rotate-prompt {
+    display: flex;
+  }
+}
+
+/* ---- Narrow screens, touch or not ---- */
+@media (max-width: 700px) {
+  .panel {
+    padding: 1.2rem 1.2rem;
+  }
+  .panel h2 {
+    font-size: min(1.8rem, 6vw);
+  }
+  .tally .line {
+    font-size: 0.85rem;
+    gap: 0.8rem;
+  }
+  .tally .line.total {
+    font-size: 1.2rem;
+  }
+  .results .panel.tally {
+    right: auto;
+    left: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .banner {
+    left: 1.5rem;
+    bottom: 3rem;
+  }
+  .skip {
+    right: 1.5rem;
+    bottom: 1.5rem;
+  }
+  .countdown .num {
+    font-size: min(12rem, 36vw);
+  }
+  .controls {
+    font-size: 0.65rem;
+    padding: 0.8rem 1rem;
+    gap: 0.4rem 1rem;
+  }
+  .rows .row {
+    gap: 0.8rem;
+  }
+  .row .val {
+    white-space: normal;
+    text-align: right;
+  }
+}
+
+/* Short landscape phones: tighter panels so the tally and settings fit 375 px tall. */
+@media (max-height: 480px) and (orientation: landscape) {
+  .panel {
+    padding: 0.8rem 1.4rem;
+  }
+  .panel h2 {
+    font-size: 1.3rem;
+    margin-bottom: 0.7rem;
+  }
+  .tally .line {
+    padding: 0.15rem 0;
+    font-size: 0.85rem;
+  }
+  .tally .line.total {
+    font-size: 1.1rem;
+    margin-top: 0.2rem;
+  }
+  .tally .menu {
+    margin-top: 0.4rem;
+    gap: 0.2rem;
+  }
+  .tally .note {
+    margin-top: 0.4rem;
+  }
+  .scores-panel td {
+    padding: 0.1rem 0.5rem;
+  }
+  .scores-panel .tabs {
+    margin-bottom: 0.4rem;
+  }
+  .scores-panel table {
+    font-size: 0.9rem;
+  }
+  .initials .slot {
+    height: 4rem;
+  }
+  .rows {
+    gap: 0.1rem;
+  }
+  .logo small {
+    margin-top: 0.4rem;
+  }
+  .title-wrap {
+    gap: 1rem;
+  }
+  .countdown {
+    gap: 0.8rem;
+  }
+  .countdown .num {
+    font-size: 7rem;
   }
 }

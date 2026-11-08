@@ -1,5 +1,5 @@
 import type { NavEvent } from '../core/inputMapping';
-import { el, fmtScore, Screen, type UiContext } from './dom';
+import { el, fmtScore, Menu, Screen, type UiContext } from './dom';
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
@@ -24,12 +24,32 @@ export class HighScoreEntryScreen extends Screen {
         this.paint();
       });
       this.slots.push(s);
-      row.appendChild(s);
+      // Up / down arrows per letter for touch (brief 07 section 5); they work with a mouse too.
+      const col = el('div', 'slot-col');
+      col.append(this.arrow('\u25B2', 'Next letter', i, 1), s, this.arrow('\u25BC', 'Previous letter', i, -1));
+      row.appendChild(col);
     }
-    panel.append(el('h2', '', 'NEW HIGH SCORE'), this.sub, row, el('p', 'hint', 'UP/DOWN: LETTER   LEFT/RIGHT: SLOT   ENTER: OK'));
+    const hint = el('p', 'hint');
+    hint.append(el('span', 'kb-only', 'UP/DOWN: LETTER   LEFT/RIGHT: SLOT   ENTER: OK'), el('span', 'touch-only', 'TAP THE ARROWS TO SPIN EACH LETTER'));
+    const ok = new Menu([{ id: 'ok', label: 'OK' }], () => onDone(this.initials()), ctx.bus);
+    ok.root.classList.add('entry-ok');
+    panel.append(el('h2', '', 'NEW HIGH SCORE'), this.sub, row, hint, ok.root);
     const bg = el('div', 'dim-bg');
     bg.appendChild(panel);
     this.root.appendChild(bg);
+  }
+
+  private arrow(glyph: string, label: string, slot: number, dir: 1 | -1): HTMLButtonElement {
+    const b = el('button', 'letter-arrow', glyph);
+    b.type = 'button';
+    b.setAttribute('aria-label', label);
+    b.addEventListener('click', () => {
+      this.slot = slot;
+      this.letters[slot] = (this.letters[slot] + (dir > 0 ? 1 : 25)) % 26;
+      this.ctx.bus.emit('ui-move');
+      this.paint();
+    });
+    return b;
   }
 
   open(score: number, exitName: string, lastInitials: string): void {

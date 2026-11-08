@@ -58,6 +58,8 @@ export interface WorldSettings {
   exposure: number;
   /** Cap on devicePixelRatio. */
   maxPixelRatio: number;
+  /** Fraction of the capped pixel ratio actually rendered (the mobile preset renders at 0.65). */
+  renderScale: number;
   sun: SunParams;
   fog: FogParams;
   sky: SkyParams;
@@ -78,6 +80,7 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   shadowExtentM: 4000,
   exposure: 1.0,
   maxPixelRatio: 1,
+  renderScale: 1,
   sun: { azimuthDeg: 290, elevationDeg: 15, intensity: 1 },
   fog: {
     colour: 0xaeb8c2,

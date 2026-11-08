@@ -1,17 +1,21 @@
 import './style.css';
 import './ui/ui.css';
 import { Game } from './game/Game';
+import { hiddenExtensionsFromQuery, installHiddenExtensions } from './world/hideExtensions';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('#app missing');
 const params = new URLSearchParams(window.location.search);
 const dev = params.get('dev') === '1';
+// Before any WebGL context exists: Three.js reads the extension list once at renderer creation.
+if (dev) installHiddenExtensions(hiddenExtensionsFromQuery(window.location.search));
 
 Game.create({
   container: root,
   dev,
   auto: dev && params.get('auto') === '1',
   startExit: dev ? params.get('exit') : null,
+  touch: params.get('touch') === '1',
 }).catch((err: unknown) => {
   // A bad data file or a missing WebGL context should say so on the page, not just in the console.
   const box = document.createElement('pre');
