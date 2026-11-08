@@ -153,8 +153,8 @@ export class CameraRig {
     const h = headingDeg * DEG;
     const f = { x: Math.sin(h), y: 0, z: -Math.cos(h) };
     return {
-      position: { x: exitPos.x - f.x * CAM.chaseBackM, y: exitPos.y + CAM.chaseUpM + 1.5, z: exitPos.z - f.z * CAM.chaseBackM },
-      target: { x: exitPos.x + f.x * CAM.chaseLookAheadM, y: exitPos.y - 2, z: exitPos.z + f.z * CAM.chaseLookAheadM },
+      position: { x: exitPos.x - f.x * CAM.chaseBackM, y: exitPos.y + CAM.chaseUpM, z: exitPos.z - f.z * CAM.chaseBackM },
+      target: { x: exitPos.x + f.x * CAM.chaseLookAheadM, y: exitPos.y, z: exitPos.z + f.z * CAM.chaseLookAheadM },
       fovDeg: CAM.fovTrimDeg,
       rollDeg: 0,
     };
@@ -343,6 +343,11 @@ export class CameraRig {
         out.target.y = p.y + f.y * CAM.chaseLookAheadM;
         out.target.z = p.z + f.z * CAM.chaseLookAheadM;
         out.fovDeg = CAM.fovTrimDeg + (CAM.fovMaxDeg - CAM.fovTrimDeg) * speedK;
+        // Terrain behind the pilot can push the camera up (a ledge below a wall). Tip the view
+        // down by part of that lift so the pilot stays in frame.
+        const lift = Math.max(0, this.groundAt(out.position.x, out.position.z) + CAM.groundClearanceM - out.position.y);
+        out.target.y -= lift * 0.9;
+        out.position.y += lift;
       }
     }
     return out;

@@ -7,10 +7,10 @@
       "name": "The Table",
       "subtitle": "Western edge",
       "latLon": {
-        "lat": -33.957276,
-        "lon": 18.402715
+        "lat": -33.957273,
+        "lon": 18.402758
       },
-      "elevationM": 1018.0,
+      "elevationM": 1044.8,
       "headingDeg": 265,
       "difficulty": 1,
       "recommendedLandingZones": [
@@ -21,7 +21,29 @@
         "type": "always"
       },
       "intro": {
-        "cameraPath": [],
+        "cameraPath": [
+          {
+            "latLon": {
+              "lat": -33.95468,
+              "lon": 18.394879
+            },
+            "elevationM": 1304.8
+          },
+          {
+            "latLon": {
+              "lat": -33.955459,
+              "lon": 18.39909
+            },
+            "elevationM": 1144.8
+          },
+          {
+            "latLon": {
+              "lat": -33.956731,
+              "lon": 18.401506
+            },
+            "elevationM": 1074.8
+          }
+        ],
         "durationS": 7
       },
       "blurb": "The classic. Step off the top of the Table and chase the sun down to Camps Bay."
@@ -31,10 +53,10 @@
       "name": "Platteklip",
       "subtitle": "North face",
       "latLon": {
-        "lat": -33.959551,
-        "lon": 18.408142
+        "lat": -33.959586,
+        "lon": 18.40815
       },
-      "elevationM": 1008.1,
+      "elevationM": 1029.4,
       "headingDeg": 350,
       "difficulty": 3,
       "recommendedLandingZones": [
@@ -47,7 +69,29 @@
         "exitId": "the-table"
       },
       "intro": {
-        "cameraPath": [],
+        "cameraPath": [
+          {
+            "latLon": {
+              "lat": -33.952985,
+              "lon": 18.403235
+            },
+            "elevationM": 1329.4
+          },
+          {
+            "latLon": {
+              "lat": -33.956719,
+              "lon": 18.405235
+            },
+            "elevationM": 1149.4
+          },
+          {
+            "latLon": {
+              "lat": -33.958703,
+              "lon": 18.407304
+            },
+            "elevationM": 1059.4
+          }
+        ],
         "durationS": 7
       },
       "blurb": "Down the front of the mountain with the whole city in your lap. Pick your field early."
@@ -57,10 +101,10 @@
       "name": "Lion's Head",
       "subtitle": "Summit",
       "latLon": {
-        "lat": -33.935392,
-        "lon": 18.388991
+        "lat": -33.935394,
+        "lon": 18.389013
       },
-      "elevationM": 635.9,
+      "elevationM": 641.3,
       "headingDeg": 275,
       "altHeadings": [
         {
@@ -82,7 +126,29 @@
         "exitId": "the-table"
       },
       "intro": {
-        "cameraPath": [],
+        "cameraPath": [
+          {
+            "latLon": {
+              "lat": -33.932651,
+              "lon": 18.383651
+            },
+            "elevationM": 791.3
+          },
+          {
+            "latLon": {
+              "lat": -33.933874,
+              "lon": 18.386782
+            },
+            "elevationM": 701.3
+          },
+          {
+            "latLon": {
+              "lat": -33.934972,
+              "lon": 18.388188
+            },
+            "elevationM": 656.3
+          }
+        ],
         "durationS": 6
       },
       "blurb": "Low, fast and short. There is not much mountain, so use all of it."

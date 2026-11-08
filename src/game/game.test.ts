@@ -233,6 +233,28 @@ describe('RunController', () => {
     expect(run.outcome?.result.crashed).toBe(true);
   });
 
+  it('scores a canopy landing in the sea as a water landing with no landing points', () => {
+    const terrain = new StubTerrain();
+    const run = new RunController({
+      exit: { ...exitDef, position: { x: 2000, y: 400, z: 0 } },
+      headingDeg: 90,
+      terrain,
+      zones: LandingZoneRegistry.fromData(),
+      triggers: new TriggerRegistry([]),
+    });
+    run.start();
+    for (let i = 0; i < 120 * 300 && !run.ended; i++) {
+      const st = run.state;
+      run.stepRaw(1 / 120, { pitch: 0, roll: 0, yaw: 0, action: st.phase === 'wingsuit' || (st.phase === 'canopy' && st.aglM < 3.5), brake: false });
+    }
+    const o = run.outcome!;
+    expect(o.reason).toBe('water');
+    expect(o.inWater).toBe(true);
+    expect(o.result.landingScore).toBe(0);
+    expect(o.result.landingZoneId).toBeNull();
+    expect(o.result.crashed).toBe(false);
+  });
+
   it('interpolates between the last two steps', () => {
     const run = makeRun();
     for (let i = 0; i < 240; i++) run.step(1 / 120, idle);
