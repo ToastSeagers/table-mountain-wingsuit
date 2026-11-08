@@ -32,3 +32,10 @@ Anything not in `PLAN.md` section 1 lives here. Agents add ideas to the bottom w
 - Stage 6 follow-ups: reuse PostStack targets across render-scale changes (hitch on entering results); CI step running tests and lint before Pages deploy; terrain-aware autopilot for balance probes; replace the Clifton shader mask with a rebuilt sea mask.
 - v0.2: paint an HTML/CSS title poster before WebGL initialises so Largest Contentful Paint is a DOM element, not the canvas (headless Lighthouse LCP 3.5 to 4.5 s on v0.1).
 - Stage 7 (v0.2) is the mobile stage; brief in docs/agents/07-mobile.md. Tilt steering stays out until the owner asks; the hook is left in place.
+
+## From the research note (docs/research/wingsuit-sims.md, 2026-11-08)
+
+Priority 1: instant restart when terrain is already settled at the same exit; dynamic resolution scaling from frame time on touch devices; risk-weighted proximity scoring with near-miss stamps.
+Priority 2: Zen mode toggle; per-exit challenges with medals; beginner assist (auto-pitch, steer only); first-flight tutorial overlay; radial speed blur.
+Priority 3: capped ground-effect float (judge in play); two-thumb touch scheme as an option; `?bench=1` benchmark with baseline; iOS Safari test pass.
+Do not add: trick scoring (Skydive: Proximity Flight's failure mode); tilt as the primary control.
