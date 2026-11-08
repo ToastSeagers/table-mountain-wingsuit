@@ -650,6 +650,8 @@ export class Game {
   private updateCountdown(dtS: number): void {
     const run = this.run;
     if (!run) return;
+    // Held in portrait on a phone: the rotate prompt is up, so the clock waits for landscape.
+    if (this.input.touchUi && this.portrait) return;
     const ready = this.world.terrain.sampler.isReady();
     const preloadDone = this.countdownWaitedS > PRELOAD_WAIT_MAX_S || this.preloadSettled();
     if (!(ready && preloadDone)) {
@@ -693,6 +695,10 @@ export class Game {
   private updateFlying(dtS: number, paused: boolean): void {
     const run = this.run;
     if (!run) return;
+    if (!paused && !run.ended && this.input.touchUi && this.portrait) {
+      this.dispatch('PAUSE');
+      return;
+    }
     if (!paused && !run.ended) {
       const alpha = this.loop.advance(dtS, (step) => {
         if (this.autopilot) {
