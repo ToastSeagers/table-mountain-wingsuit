@@ -63,6 +63,8 @@ Posted where the subreddit's rules allow AI-assisted work; the disclosure is the
 
 ### r/vibecoding version (process first, per its rule 3)
 
+Title: *I ran Claude Code as a seven-stage studio to build a wingsuit game on the real Table Mountain. Here is the project and how I made it.*
+
 r/vibecoding welcomes vibe-coded projects but removes link drops: the post must say which tools, what workflow, and what was learned. Rule 1 asks that the post text itself be written by a human, so the owner should rewrite this in their own words before posting; it is a skeleton with the facts filled in.
 
 > **Here's the project:** a browser wingsuit game over the real Table Mountain. https://toastseagers.github.io/table-mountain-wingsuit/ (free, no install, works on a phone; code MIT at https://github.com/ToastSeagers/table-mountain-wingsuit)
