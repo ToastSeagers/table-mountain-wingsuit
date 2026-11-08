@@ -144,7 +144,7 @@ void main() {
   if (uVhs > 0.0) {
     float band = fract(uTime * 0.07);
     float d = abs(uv.y - band);
-    float tracking = smoothstep(0.05, 0.0, d);
+    float tracking = 1.0 - smoothstep(0.0, 0.05, d);
     uv.x += uVhs * (0.0009 * sin(uv.y * 380.0 + uTime * 3.0) + 0.012 * tracking * (hash(vec2(floor(uv.y * 240.0), floor(uTime * 24.0))) - 0.5));
   }
 
@@ -203,7 +203,7 @@ void main() {
     col *= 1.0 - 0.14 * uVhs * scan;
     float l2 = dot(col, vec3(0.299, 0.587, 0.114));
     col = mix(col, vec3(l2) * vec3(1.02, 1.0, 0.94), 0.18 * uVhs);
-    float tracking = smoothstep(0.03, 0.0, abs(vUv.y - fract(uTime * 0.07)));
+    float tracking = 1.0 - smoothstep(0.0, 0.03, abs(vUv.y - fract(uTime * 0.07)));
     col += tracking * uVhs * 0.06 * hash(vUv * uRes + uTime);
   }
 
@@ -239,7 +239,15 @@ function fullScreenTriangle(): BufferGeometry {
  * -> composite (CA, bloom, sun shafts, ACES, warm grade, sRGB, VHS, vignette, grain) to screen.
  */
 export class PostStack {
-  readonly effects: PostEffects = { tonemap: true, grade: true, bloom: true, shafts: true, aberration: true, vignette: true, grain: true };
+  readonly effects: PostEffects = {
+    tonemap: true,
+    grade: true,
+    bloom: true,
+    shafts: true,
+    aberration: true,
+    vignette: true,
+    grain: true,
+  };
   enabled = true;
   private preset: PostPreset = POST_PRESETS.medium;
   private presetName: QualityPreset = 'medium';
@@ -258,8 +266,20 @@ export class PostStack {
   constructor(private readonly renderer: WebGLRenderer) {
     this.quad = new Mesh(fullScreenTriangle());
     this.quad.frustumCulled = false;
-    this.bright = new ShaderMaterial({ vertexShader: VERT, fragmentShader: BRIGHT_FRAG, uniforms: { tScene: { value: null }, uThreshold: { value: BLOOM_THRESHOLD } }, depthTest: false, depthWrite: false });
-    this.down = new ShaderMaterial({ vertexShader: VERT, fragmentShader: DOWN_FRAG, uniforms: { tSrc: { value: null }, uTexel: { value: new Vector2() } }, depthTest: false, depthWrite: false });
+    this.bright = new ShaderMaterial({
+      vertexShader: VERT,
+      fragmentShader: BRIGHT_FRAG,
+      uniforms: { tScene: { value: null }, uThreshold: { value: BLOOM_THRESHOLD } },
+      depthTest: false,
+      depthWrite: false,
+    });
+    this.down = new ShaderMaterial({
+      vertexShader: VERT,
+      fragmentShader: DOWN_FRAG,
+      uniforms: { tSrc: { value: null }, uTexel: { value: new Vector2() } },
+      depthTest: false,
+      depthWrite: false,
+    });
     this.composite = this.makeComposite();
   }
 
@@ -312,10 +332,26 @@ export class PostStack {
     // Float depth keeps the reversed-Z precision the world relies on (1 m to 80 km).
     depth.type = FloatType;
     depth.format = DepthFormat;
-    this.sceneRT = new WebGLRenderTarget(w, h, { type: HalfFloatType, format: RGBAFormat, samples: this.preset.msaa, depthBuffer: true, depthTexture: depth, minFilter: LinearFilter, magFilter: LinearFilter });
+    this.sceneRT = new WebGLRenderTarget(w, h, {
+      type: HalfFloatType,
+      format: RGBAFormat,
+      samples: this.preset.msaa,
+      depthBuffer: true,
+      depthTexture: depth,
+      minFilter: LinearFilter,
+      magFilter: LinearFilter,
+    });
     for (let i = 0; i < this.preset.bloomLevels; i++) {
       const s = 2 ** (i + 1);
-      this.mips.push(new WebGLRenderTarget(Math.max(1, Math.floor(w / s)), Math.max(1, Math.floor(h / s)), { type: HalfFloatType, format: RGBAFormat, depthBuffer: false, minFilter: LinearFilter, magFilter: LinearFilter }));
+      this.mips.push(
+        new WebGLRenderTarget(Math.max(1, Math.floor(w / s)), Math.max(1, Math.floor(h / s)), {
+          type: HalfFloatType,
+          format: RGBAFormat,
+          depthBuffer: false,
+          minFilter: LinearFilter,
+          magFilter: LinearFilter,
+        }),
+      );
     }
   }
 
@@ -370,9 +406,11 @@ export class PostStack {
     const u = this.composite.uniforms;
     u.tScene.value = rt.texture;
     const weights = [0, 0, 0, 0, 0];
-    if (fx.bloom && levels > 0) for (let i = 0; i < levels; i++) weights[i] = 1 / levels + (i === 0 ? 0 : 0.05 * i);
+    if (fx.bloom && levels > 0)
+      for (let i = 0; i < levels; i++) weights[i] = 1 / levels + (i === 0 ? 0 : 0.05 * i);
     u.uBloomW.value = weights;
-    for (let i = 0; i < MAX_LEVELS; i++) u[`tBloom${i}`].value = (this.mips[Math.min(i, levels - 1)] ?? this.mips[0] ?? rt).texture;
+    for (let i = 0; i < MAX_LEVELS; i++)
+      u[`tBloom${i}`].value = (this.mips[Math.min(i, levels - 1)] ?? this.mips[0] ?? rt).texture;
     u.uBloomStrength.value = BLOOM_STRENGTH;
     // Sun shafts: project the sun direction to the screen; fade out when it is behind the view.
     this.sunV.copy(camera.position).addScaledVector(p.sunDir, 10_000).project(camera);
@@ -381,9 +419,16 @@ export class PostStack {
     // Fade the shafts as the sun leaves the frame, so a distant glow never draws a beam from off-screen.
     const offScreen = Math.hypot(this.sunV.x, this.sunV.y);
     const onScreen = 1 - Math.max(0, Math.min(1, (offScreen - 0.9) / 0.8));
-    u.uShaft.value = fx.shafts && this.preset.shaftSamples > 0 && levels > 0 ? SHAFT_STRENGTH * onScreen * Math.max(0, Math.min(1, facing * 3)) : 0;
-    const caK = Math.max(0, Math.min(1, (p.airspeedMps - CA_START_MPS) / (CA_FULL_MPS - CA_START_MPS)));
-    u.uCa.value = fx.aberration && this.preset.aberration ? CA_MAX_UV * caK * caK * (3 - 2 * caK) : 0;
+    u.uShaft.value =
+      fx.shafts && this.preset.shaftSamples > 0 && levels > 0
+        ? SHAFT_STRENGTH * onScreen * Math.max(0, Math.min(1, facing * 3))
+        : 0;
+    const caK = Math.max(
+      0,
+      Math.min(1, (p.airspeedMps - CA_START_MPS) / (CA_FULL_MPS - CA_START_MPS)),
+    );
+    u.uCa.value =
+      fx.aberration && this.preset.aberration ? CA_MAX_UV * caK * caK * (3 - 2 * caK) : 0;
     u.uVig.value = fx.vignette ? VIGNETTE : 0;
     u.uGrain.value = fx.grain ? GRAIN : 0;
     u.uGrade.value = fx.grade ? 1 : 0;

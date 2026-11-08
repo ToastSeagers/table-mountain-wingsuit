@@ -3,7 +3,10 @@ import type { CameraRig, CameraSubject } from '../game/CameraRig';
 
 /** True when the OS asks for reduced motion (shake and grain pattern are frozen). */
 export function prefersReducedMotion(): boolean {
-  return typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  return (
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  );
 }
 
 /**
@@ -48,7 +51,9 @@ export class CameraEffects {
     this.stretch += (dive * 4 - this.stretch) * Math.min(1, dt * 2);
     this.rig.shakeScale = this.reducedMotion ? 0 : 1;
     this.rig.kickM = this.reducedMotion ? 0 : this.kick;
-    this.rig.fovOffsetDeg = this.reducedMotion ? 0 : this.punch + (this.rig.shakeEnabled ? this.stretch : 0);
+    this.rig.fovOffsetDeg = this.reducedMotion
+      ? 0
+      : this.punch + (this.rig.shakeEnabled ? this.stretch : 0);
   }
 }
 

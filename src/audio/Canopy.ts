@@ -4,13 +4,14 @@ import type { AudioEngine } from './AudioEngine';
 export type SurfaceKind = 'grass' | 'sand' | 'tarmac' | 'water' | 'rock';
 
 /** Landing thump voicing per surface: body frequency, noise colour, noise length. */
-const SURFACE: Record<SurfaceKind, { thump: number; noiseHz: number; noiseS: number; q: number }> = {
-  grass: { thump: 70, noiseHz: 500, noiseS: 0.25, q: 0.7 },
-  sand: { thump: 55, noiseHz: 1400, noiseS: 0.4, q: 0.5 },
-  tarmac: { thump: 95, noiseHz: 2800, noiseS: 0.12, q: 1.2 },
-  water: { thump: 45, noiseHz: 900, noiseS: 0.8, q: 0.4 },
-  rock: { thump: 85, noiseHz: 2200, noiseS: 0.16, q: 1 },
-};
+const SURFACE: Record<SurfaceKind, { thump: number; noiseHz: number; noiseS: number; q: number }> =
+  {
+    grass: { thump: 70, noiseHz: 500, noiseS: 0.25, q: 0.7 },
+    sand: { thump: 55, noiseHz: 1400, noiseS: 0.4, q: 0.5 },
+    tarmac: { thump: 95, noiseHz: 2800, noiseS: 0.12, q: 1.2 },
+    water: { thump: 45, noiseHz: 900, noiseS: 0.8, q: 0.4 },
+    rock: { thump: 85, noiseHz: 2200, noiseS: 0.16, q: 1 },
+  };
 
 /**
  * Canopy sounds: the opening snap (one hard noise crack plus a sub thump, then quiet), line
@@ -67,7 +68,13 @@ export class Canopy {
     this.flutterFilter.frequency.setTargetAtTime(900 + 1800 * sp, t, 0.2);
     // Flare: the energy meter drains while the player holds it.
     if (s.phase === 'canopy' && s.flareEnergy < this.lastFlare - 0.002 && t >= this.nextSwooshT) {
-      this.audio.burst(this.audio.world, { durS: 0.45, gain: 0.22, freq: 700, sweepTo: 2600, q: 0.8 });
+      this.audio.burst(this.audio.world, {
+        durS: 0.45,
+        gain: 0.22,
+        freq: 700,
+        sweepTo: 2600,
+        q: 0.8,
+      });
       this.nextSwooshT = t + 0.4;
     }
     this.lastFlare = s.flareEnergy;
@@ -84,9 +91,21 @@ export class Canopy {
     const a = this.audio;
     const v = SURFACE[surface];
     const hard = s.phase === 'crashed' ? 1 : Math.min(1, (s.landing?.verticalMps ?? 2) / 6);
-    a.tone(a.world, { freq: v.thump * (1 + 0.5 * hard), slideTo: 28, durS: 0.3 + 0.25 * hard, gain: 0.5 + 0.5 * hard, type: 'sine' });
-    a.burst(a.world, { durS: v.noiseS * (0.7 + 0.6 * hard), gain: 0.3 + 0.5 * hard, freq: v.noiseHz, q: v.q });
-    if (s.phase === 'crashed') a.burst(a.world, { durS: 0.6, gain: 0.7, freq: 300, type: 'lowpass', q: 0.5 });
+    a.tone(a.world, {
+      freq: v.thump * (1 + 0.5 * hard),
+      slideTo: 28,
+      durS: 0.3 + 0.25 * hard,
+      gain: 0.5 + 0.5 * hard,
+      type: 'sine',
+    });
+    a.burst(a.world, {
+      durS: v.noiseS * (0.7 + 0.6 * hard),
+      gain: 0.3 + 0.5 * hard,
+      freq: v.noiseHz,
+      q: v.q,
+    });
+    if (s.phase === 'crashed')
+      a.burst(a.world, { durS: 0.6, gain: 0.7, freq: 300, type: 'lowpass', q: 0.5 });
   }
 
   dispose(): void {

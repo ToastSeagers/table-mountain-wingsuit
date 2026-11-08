@@ -15,9 +15,11 @@ export interface Shot {
 const GROUND_SHOT_S = 3.4;
 const GROUND_OFFSET_M = 24;
 const GROUND_EYE_M = 2;
-const MIN_SEPARATION_S = 4;
+const MIN_SEPARATION_S = 8;
 const LANDING_SHOT_S = 3.2;
 const CHASE_CHUNK_S = 3.6;
+/** Under canopy nothing happens fast, so shots run longer. */
+const CANOPY_CHUNK_S = 5.6;
 const HOLD_AFTER_S = 3;
 
 const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
@@ -33,7 +35,12 @@ export class ReplayDirector {
   readonly durationS: number;
   private index = 0;
   private fresh = true;
-  private readonly pose: CameraPose = { position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 }, fovDeg: 60, rollDeg: 0 };
+  private readonly pose: CameraPose = {
+    position: { x: 0, y: 0, z: 0 },
+    target: { x: 0, y: 0, z: 0 },
+    fovDeg: 60,
+    rollDeg: 0,
+  };
 
   constructor(
     frames: readonly ReplayFrame[],
@@ -54,14 +61,18 @@ export class ReplayDirector {
     const canopyFrame = frames.find((f) => f.phase === 'deploying' || f.phase === 'canopy');
     const tCanopy = canopyFrame ? canopyFrame.t : end;
     if (canopyFrame && landingStart - tCanopy > 2.5) {
-      special.push({ kind: 'canopy', t0: tCanopy + 0.4, t1: Math.min(landingStart, tCanopy + 4.4) });
+      special.push({
+        kind: 'canopy',
+        t0: tCanopy + 0.4,
+        t1: Math.min(landingStart, tCanopy + 4.4),
+      });
     }
 
     // Closest approach to the ground, sampled twice a second while still in the wingsuit.
     const cand: { t: number; clearance: number; i: number }[] = [];
     for (let i = 0; i < frames.length; i += 15) {
       const f = frames[i];
-      if (f.t < 1.5 || f.t > tCanopy - 1) continue;
+      if (f.t < 6 || f.t > tCanopy - 1) continue;
       cand.push({ t: f.t, clearance: f.p.y - this.groundAt(f.p.x, f.p.z), i });
     }
     cand.sort((a, b) => a.clearance - b.clearance);
@@ -84,7 +95,12 @@ export class ReplayDirector {
       const x = f.p.x + -dz * GROUND_OFFSET_M * side;
       const z = f.p.z + dx * GROUND_OFFSET_M * side;
       const y = Math.max(this.groundAt(x, z) + GROUND_EYE_M, 0);
-      special.push({ kind: 'ground', t0: f.t - GROUND_SHOT_S / 2, t1: f.t + GROUND_SHOT_S / 2, anchor: { x, y, z } });
+      special.push({
+        kind: 'ground',
+        t0: f.t - GROUND_SHOT_S / 2,
+        t1: f.t + GROUND_SHOT_S / 2,
+        anchor: { x, y, z },
+      });
     }
 
     special.sort((a, b) => a.t0 - b.t0);
@@ -101,7 +117,8 @@ export class ReplayDirector {
     let alt = 0;
     const fill = (until: number): void => {
       while (until - cursor > 0.8) {
-        const len = until - cursor < CHASE_CHUNK_S * 1.5 ? until - cursor : CHASE_CHUNK_S;
+        const chunk = cursor >= tCanopy ? CANOPY_CHUNK_S : CHASE_CHUNK_S;
+        const len = until - cursor < chunk * 1.5 ? until - cursor : chunk;
         out.push({ kind: alt++ % 2 === 0 ? 'chase' : 'side', t0: cursor, t1: cursor + len });
         cursor += len;
       }
@@ -150,7 +167,8 @@ export class ReplayDirector {
         return this.sideCam(subject);
       default: {
         if (changed) this.rig.reset(subject);
-        const mode: CameraMode = shot.kind === 'landing' ? 'landing' : shot.kind === 'canopy' ? 'canopy' : 'chase';
+        const mode: CameraMode =
+          shot.kind === 'landing' ? 'landing' : shot.kind === 'canopy' ? 'canopy' : 'chase';
         return this.rig.update(dtS, mode, subject);
       }
     }

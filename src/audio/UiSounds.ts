@@ -15,8 +15,38 @@ const CHORDS: readonly (readonly number[])[] = [
 ];
 const BASS = [45, 41, 48, 43];
 const LEAD: readonly (number | null)[] = [
-  76, null, 79, 76, 72, null, 76, null, 77, null, 81, 77, 72, null, 69, null,
-  72, 76, 79, null, 84, null, 79, 76, 74, null, 71, 74, 79, null, null, null,
+  76,
+  null,
+  79,
+  76,
+  72,
+  null,
+  76,
+  null,
+  77,
+  null,
+  81,
+  77,
+  72,
+  null,
+  69,
+  null,
+  72,
+  76,
+  79,
+  null,
+  84,
+  null,
+  79,
+  76,
+  74,
+  null,
+  71,
+  74,
+  79,
+  null,
+  null,
+  null,
 ];
 
 /**
@@ -72,13 +102,31 @@ export class UiSounds {
     const a = this.audio;
     const t = a.now;
     const go = n === 0;
-    a.tone(this.dest, { at: t, freq: go ? 190 : 140, slideTo: go ? 70 : 50, durS: go ? 0.4 : 0.22, gain: go ? 0.7 : 0.55, type: 'sine' });
-    a.burst(this.dest, { at: t, durS: go ? 0.18 : 0.1, gain: go ? 0.35 : 0.22, freq: 1800, q: 0.7 });
+    a.tone(this.dest, {
+      at: t,
+      freq: go ? 190 : 140,
+      slideTo: go ? 70 : 50,
+      durS: go ? 0.4 : 0.22,
+      gain: go ? 0.7 : 0.55,
+      type: 'sine',
+    });
+    a.burst(this.dest, {
+      at: t,
+      durS: go ? 0.18 : 0.1,
+      gain: go ? 0.35 : 0.22,
+      freq: 1800,
+      q: 0.7,
+    });
     if (go) a.tone(this.dest, { at: t, freq: 1046, durS: 0.3, gain: 0.2, type: 'square' });
   }
 
   tally(): void {
-    this.audio.tone(this.dest, { freq: 1200 + Math.random() * 120, durS: 0.025, gain: 0.1, type: 'square' });
+    this.audio.tone(this.dest, {
+      freq: 1200 + Math.random() * 120,
+      durS: 0.025,
+      gain: 0.1,
+      type: 'square',
+    });
   }
 
   stamp(): void {
@@ -92,7 +140,9 @@ export class UiSounds {
     const a = this.audio;
     const t = a.now;
     const notes = [60, 64, 67, 72, 67, 72, 76];
-    notes.forEach((n, i) => a.tone(this.dest, { at: t + i * 0.12, freq: midi(n), durS: 0.16, gain: 0.2, type: 'square' }));
+    notes.forEach((n, i) =>
+      a.tone(this.dest, { at: t + i * 0.12, freq: midi(n), durS: 0.16, gain: 0.2, type: 'square' }),
+    );
     const t2 = t + notes.length * 0.12;
     for (const n of [60, 64, 67, 72]) {
       a.tone(this.dest, { at: t2, freq: midi(n), durS: 1.2, gain: 0.13, type: 'square' });
@@ -105,7 +155,14 @@ export class UiSounds {
     const a = this.audio;
     const t = a.now + 0.05;
     a.tone(this.dest, { at: t, freq: 392, slideTo: 98, durS: 0.7, gain: 0.25, type: 'sawtooth' });
-    a.tone(this.dest, { at: t + 0.2, freq: 370, slideTo: 92, durS: 0.7, gain: 0.2, type: 'sawtooth' });
+    a.tone(this.dest, {
+      at: t + 0.2,
+      freq: 370,
+      slideTo: 92,
+      durS: 0.7,
+      gain: 0.2,
+      type: 'sawtooth',
+    });
     a.burst(this.dest, { at: t, durS: 0.5, gain: 0.4, freq: 200, type: 'lowpass', q: 0.5 });
   }
 
@@ -144,15 +201,45 @@ export class UiSounds {
     const inBar = s % 8;
     const quiet = 0.5; // the loop sits under the UI blips
     // Bass on the beat, octave pop on the off-beats.
-    if (inBar % 2 === 0) a.tone(this.dest, { at, freq: midi(BASS[bar] + (inBar % 4 === 2 ? 12 : 0)), durS: 0.22, gain: 0.16 * quiet, type: 'triangle' });
+    if (inBar % 2 === 0)
+      a.tone(this.dest, {
+        at,
+        freq: midi(BASS[bar] + (inBar % 4 === 2 ? 12 : 0)),
+        durS: 0.22,
+        gain: 0.16 * quiet,
+        type: 'triangle',
+      });
     // Chord arpeggio on every step.
     const ch = CHORDS[bar];
-    a.tone(this.dest, { at, freq: midi(ch[inBar % 3] + 12), durS: 0.12, gain: 0.07 * quiet, type: 'square' });
+    a.tone(this.dest, {
+      at,
+      freq: midi(ch[inBar % 3] + 12),
+      durS: 0.12,
+      gain: 0.07 * quiet,
+      type: 'square',
+    });
     const lead = LEAD[s];
-    if (lead != null) a.tone(this.dest, { at, freq: midi(lead), durS: BEAT_S * 0.45, gain: 0.13 * quiet, type: 'square' });
+    if (lead != null)
+      a.tone(this.dest, {
+        at,
+        freq: midi(lead),
+        durS: BEAT_S * 0.45,
+        gain: 0.13 * quiet,
+        type: 'square',
+      });
     // Drums: kick on 1 and 3, hat on offbeats, snare-ish noise on 2 and 4.
-    if (inBar % 4 === 0) a.tone(this.dest, { at, freq: 130, slideTo: 45, durS: 0.16, gain: 0.3 * quiet, type: 'sine' });
-    if (inBar % 4 === 2) a.burst(this.dest, { at, durS: 0.12, gain: 0.16 * quiet, freq: 1600, q: 0.6 });
-    if (inBar % 2 === 1) a.burst(this.dest, { at, durS: 0.04, gain: 0.07 * quiet, freq: 7000, type: 'highpass' });
+    if (inBar % 4 === 0)
+      a.tone(this.dest, {
+        at,
+        freq: 130,
+        slideTo: 45,
+        durS: 0.16,
+        gain: 0.3 * quiet,
+        type: 'sine',
+      });
+    if (inBar % 4 === 2)
+      a.burst(this.dest, { at, durS: 0.12, gain: 0.16 * quiet, freq: 1600, q: 0.6 });
+    if (inBar % 2 === 1)
+      a.burst(this.dest, { at, durS: 0.04, gain: 0.07 * quiet, freq: 7000, type: 'highpass' });
   }
 }

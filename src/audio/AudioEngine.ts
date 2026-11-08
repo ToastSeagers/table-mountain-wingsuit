@@ -35,7 +35,9 @@ export class AudioEngine {
   private unlocked = false;
 
   constructor(settings: SettingsStore) {
-    const Ctor: typeof AudioContext = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const Ctor: typeof AudioContext =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     this.ctx = new Ctor({ latencyHint: 'interactive' });
     // A soft limiter on the master so stacked blips and a landing thump cannot clip.
     const limiter = this.ctx.createDynamicsCompressor();
@@ -94,7 +96,18 @@ export class AudioEngine {
   }
 
   /** One-shot noise burst through a filter, with an exponential decay. */
-  burst(dest: AudioNode, opts: { at?: number; durS: number; gain: number; freq: number; q?: number; type?: BiquadFilterType; sweepTo?: number }): void {
+  burst(
+    dest: AudioNode,
+    opts: {
+      at?: number;
+      durS: number;
+      gain: number;
+      freq: number;
+      q?: number;
+      type?: BiquadFilterType;
+      sweepTo?: number;
+    },
+  ): void {
     const c = this.ctx;
     const t = opts.at ?? c.currentTime;
     const src = c.createBufferSource();
@@ -113,7 +126,17 @@ export class AudioEngine {
   }
 
   /** One oscillator note with a short attack and exponential release. */
-  tone(dest: AudioNode, opts: { at?: number; freq: number; durS: number; gain: number; type?: OscillatorType; slideTo?: number }): void {
+  tone(
+    dest: AudioNode,
+    opts: {
+      at?: number;
+      freq: number;
+      durS: number;
+      gain: number;
+      type?: OscillatorType;
+      slideTo?: number;
+    },
+  ): void {
     const c = this.ctx;
     const t = opts.at ?? c.currentTime;
     const o = c.createOscillator();

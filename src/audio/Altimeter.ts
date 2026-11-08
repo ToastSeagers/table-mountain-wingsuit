@@ -33,7 +33,11 @@ export class Altimeter {
 
   update(s: WingsuitFlightState | null): void {
     if (!s) return;
-    const under = s.phase === 'canopy' || s.phase === 'deploying' || s.phase === 'landed' || s.phase === 'crashed';
+    const under =
+      s.phase === 'canopy' ||
+      s.phase === 'deploying' ||
+      s.phase === 'landed' ||
+      s.phase === 'crashed';
     const agl = s.aglM;
     if (under) {
       this.prevAgl = agl;
@@ -50,7 +54,12 @@ export class Altimeter {
       if (now >= this.nextPulseT) {
         const k = (PULSE_START_AGL_M - agl) / PULSE_START_AGL_M;
         this.nextPulseT = now + 1 / (1.6 + 7 * k * k);
-        this.audio.tone(this.audio.world, { freq: 1568 + 500 * k, durS: 0.06, gain: 0.12 + 0.1 * k, type: 'square' });
+        this.audio.tone(this.audio.world, {
+          freq: 1568 + 500 * k,
+          durS: 0.06,
+          gain: 0.12 + 0.1 * k,
+          type: 'square',
+        });
         this.onBeep?.(agl);
       }
     }
@@ -58,6 +67,13 @@ export class Altimeter {
 
   private cue(count: number, freq: number, gap: number): void {
     const t = this.audio.now;
-    for (let i = 0; i < count; i++) this.audio.tone(this.audio.world, { at: t + i * (gap + 0.06), freq, durS: 0.09, gain: 0.2, type: 'square' });
+    for (let i = 0; i < count; i++)
+      this.audio.tone(this.audio.world, {
+        at: t + i * (gap + 0.06),
+        freq,
+        durS: 0.09,
+        gain: 0.2,
+        type: 'square',
+      });
   }
 }
