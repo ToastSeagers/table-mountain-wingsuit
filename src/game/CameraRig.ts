@@ -116,6 +116,10 @@ function spline(pts: readonly Vec3[], u: number, out: Vec3): Vec3 {
 export class CameraRig {
   readonly pose: CameraPose = makePose();
   shakeEnabled = true;
+  /** Stage 5 camera effects: scale on the built-in shake, an additive FOV (deg) and a vertical target kick (m). */
+  shakeScale = 1;
+  fovOffsetDeg = 0;
+  kickM = 0;
   private readonly smoothPos: Vec3 = { x: 0, y: 0, z: 0 };
   private readonly smoothTarget: Vec3 = { x: 0, y: 0, z: 0 };
   private smoothFov: number = CAM.fovTrimDeg;
@@ -240,11 +244,13 @@ export class CameraRig {
     p.target.x = this.smoothTarget.x;
     p.target.y = this.smoothTarget.y;
     p.target.z = this.smoothTarget.z;
-    p.fovDeg = this.smoothFov;
+    p.fovDeg = this.smoothFov + this.fovOffsetDeg;
     p.rollDeg = this.smoothRoll;
-    if (this.shakeEnabled) {
+    p.target.y += this.kickM;
+    if (this.shakeEnabled && this.shakeScale > 0) {
       let amp = CAM.shakeMaxM * smoothstep(CAM.shakeStartMps, CAM.maxSpeedMps, subject.airspeedMps);
       amp = Math.max(amp, CAM.openingShakeM * clamp01(this.openingShockS / 0.6));
+      amp *= this.shakeScale;
       if (amp > 0) {
         const t = this.timeS;
         p.position.x += amp * Math.sin(t * 61.3) * Math.cos(t * 17.1);

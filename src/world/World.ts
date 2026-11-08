@@ -53,6 +53,8 @@ export class World {
   readonly terrain: Terrain;
   /** Which depth trick is active, for the report and the perf overlay. */
   readonly depthMode: 'reversed' | 'logarithmic';
+  /** Stage 5 hook: when set, replaces the plain render (the post stack renders through this). */
+  renderHook: ((scene: Scene, camera: PerspectiveCamera) => void) | null = null;
   private current: WorldSettings;
   private readonly tmp = new Vector3();
 
@@ -168,7 +170,8 @@ export class World {
     this.sky.update(this.camera.position);
     this.sea.update(this.camera.position);
     if (this.current.shadows) this.placeShadowCamera();
-    this.renderer.render(this.scene, this.camera);
+    if (this.renderHook) this.renderHook(this.scene, this.camera);
+    else this.renderer.render(this.scene, this.camera);
   }
 
   /** The shadow box covers the ground ahead of the camera; light sits up-sun of it. */

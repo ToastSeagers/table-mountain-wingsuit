@@ -12,6 +12,7 @@ Every third-party asset that ships in the game or is used to build one is listed
 | Procedural detail, water-ripple and cloud textures | Terrain detail blend (rock, fynbos, sand), sea ripples, sky clouds | Generated at startup in code (`src/world/NoiseTexture.ts`, seeded value-noise fbm) | None needed: original to this project | Stage 2 | No external texture or HDRI is used for the world; the sky, sun and fog are shaders. |
 | Audio | Wind, UI, canopy | Synthesised in code where possible; any samples from CC0 sources (freesound.org CC0 filter) | CC0 | Stage 5 | Record each sample's URL |
 | Exit card pictures `public/img/exit-<id>.png` | Exit-select cards | Rendered by the game itself from the exit camera, then flattened to the chrome palette | Derived from the terrain textures above; same attribution as the City of Cape Town aerial and elevation rows | Stage 4 | 384 x 216 each, regenerate by re-capturing and re-posterising |
+| Sound effects and title loop (`src/audio/`) | Wind, altimeter, canopy, UI blips, fanfare, wipeout sting, four-bar title loop | Synthesised at runtime with Web Audio oscillators and noise; no sample files, no downloads | Original code, same licence as the project | Stage 5 | 0 bytes of audio assets (budget 8 MB) |
 
 ## Attribution text (shown in the settings screen)
 
@@ -21,3 +22,4 @@ Maintained by Stage 5 (UI settings entry) and Stage 6 (final check). Must includ
 - Aerial imagery: City of Cape Town, January 2025 (City of Cape Town Open Data).
 - Contains modified Copernicus Sentinel data 2026.
 - Produced using Copernicus WorldDEM-30 © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA; all rights reserved.
+- Sounds and title music are synthesised in the browser; no samples.
