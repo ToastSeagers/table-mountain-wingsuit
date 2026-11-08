@@ -61,9 +61,29 @@ Posted where the subreddit's rules allow AI-assisted work; the disclosure is the
 >
 > The launch points are fictional. BASE jumping is prohibited in the park. Please do not try this.
 
+### r/vibecoding version (process first, per its rule 3)
+
+r/vibecoding welcomes vibe-coded projects but removes link drops: the post must say which tools, what workflow, and what was learned. Rule 1 asks that the post text itself be written by a human, so the owner should rewrite this in their own words before posting; it is a skeleton with the facts filled in.
+
+> **Here's the project:** a browser wingsuit game over the real Table Mountain. https://toastseagers.github.io/table-mountain-wingsuit/ (free, no install, works on a phone; code MIT at https://github.com/ToastSeagers/table-mountain-wingsuit)
+>
+> **Here's how I made it.** Claude Code in the desktop app did the coding. I did not write the TypeScript. What I did was run it like a small studio:
+>
+> - **One plan, many agents.** First session wrote a staged plan: terrain data, renderer, flight model, game loop and UI, audio and post-FX, QA and release, then mobile. Each stage got its own written brief, its own fresh session, its own branch, and a gate I checked before merging. Sonnet 5.5 for most stages, Opus for the renderer, Haiku for sweeps. The plan file also says which model and effort each job gets, to keep credits down.
+> - **Real terrain, open data.** City of Cape Town 2 m LiDAR contours and their 2025 aerial mosaic, turned by a Python pipeline into 5 m height tiles and WebP textures, 27 MB total. Lat/lon never enters game code; it is converted once at the data boundary.
+> - **Physics you can unit test.** The flight model is pure TypeScript with no Three.js import, so it runs headless: 64 tests, a CSV harness, a measured-versus-target table for glide ratio and sink against published wingsuit numbers. That caught more bugs than playing did.
+> - **Autopilot as a test pilot.** A scripted pilot flies every launch point, so a terrain or exit change shows up as a crash in a terminal, not a feeling.
+> - **Mobile taught me the most.** First phone build stuttered for the first minute: the preset rendered at 1.2 pixels per CSS pixel, streamed 12 chunk builds a frame and churned a 24-tile texture cache. Fix was a countdown that waits for terrain to settle, device-scaled streaming budgets, and a bigger cache. The perf overlay now prints "builds since GO" so a phone screenshot is a bug report.
+> - **Local model for grunt work.** A 7B coder model through Ollama and Aider handles renames and boilerplate so the paid model does the thinking.
+>
+> **What I'd do differently:** the sim got good before the game had a hook, which is the exact mistake the Volo Airsport dev wrote about when shutting that project down. Next round is restart-in-one-tap, risk-weighted proximity scoring, and a Zen mode, not more physics.
+>
+> Feedback button is on the results screen; it fills in your device and frame rate itself. Tell me what feels wrong.
+
 Notes for the owner when posting:
 
-- Check each subreddit's rules on AI-generated content before posting; several game-dev subreddits ban it outright and a ban is worse than not posting. Local (r/capetown), web-game and wingsuit communities are better fits than r/gamedev. Use an "AI-assisted" flair where one exists.
+- Check each subreddit's rules on AI-generated content before posting; a removal is worse than not posting. Use an "AI-assisted" flair where one exists.
+- Verified 2026-11-08: **r/capetown bans AI-generated content** (owner read the sidebar), so do not post there without a modmail reply saying a human-written post about an AI-coded game is acceptable. **r/vibecoding** allows vibe-coded projects only with tools, workflow and insights in the post (rule 3) and human-written text (rule 1); rule 2 (tool approval) is for startups. **r/playmygame** needs a free playable build, the link flair, "Title, one-line hook" and a month between posts. **r/IndieGaming** allows one post per two weeks and requires saying how generative AI was used. **r/IndieDev** has few rules and favours images and GIFs. **r/gamedev** is not a showcase. **r/webdev** is Showoff Saturday only. **r/SideProject** wants "[Project name] - [Short description]". Unverified: r/WebGames, r/threejs, r/southafrica, r/ClaudeCode, r/wingsuit, r/SkyDiving, r/BASEjumping.
 - Answer specific questions, do not argue the general point. Anyone who objects on principle is not going to be a tester.
 - The same disclosure can go in one line on the game's title screen later if the thread shows people want it in the product, not just the post.
 
