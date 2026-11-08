@@ -61,17 +61,17 @@ describe('air time', () => {
 });
 
 describe('proximity', () => {
-  it('accrues dt * airspeed * (40 - agl) / 40 * 2.5 when under 40 m AGL and over 35 m/s', () => {
+  it('accrues dt * airspeed * (50 - agl) / 50 * gain when under 50 m AGL and over 35 m/s', () => {
     const tr = tracker();
     run(tr, 2, { aglM: 20, airspeedMps: 50 });
-    // 2 s * 50 m/s * 0.5 * 2.5 = 125
-    expect(tr.finish(end()).proximityScore).toBe(125);
+    // 2 s * 50 m/s * 0.6 * 4 = 240
+    expect(tr.finish(end()).proximityScore).toBe(240);
   });
 
   it('does nothing when high, slow, or exactly at the thresholds', () => {
     const tr = tracker();
-    run(tr, 3, { aglM: 40, airspeedMps: 60 });
-    run(tr, 3, { aglM: 10, airspeedMps: 35 });
+    run(tr, 3, { aglM: SCORING.proximity.aglBelowM, airspeedMps: 60 });
+    run(tr, 3, { aglM: 10, airspeedMps: SCORING.proximity.airspeedAboveMps });
     run(tr, 3, { aglM: 100, airspeedMps: 60 });
     expect(tr.finish(end()).proximityScore).toBe(0);
   });
@@ -85,7 +85,7 @@ describe('proximity', () => {
   it('keeps proximity on a crash', () => {
     const tr = tracker();
     run(tr, 2, { aglM: 20, airspeedMps: 50 });
-    expect(tr.finish(end({ crashed: true, landingClass: 'crash' })).proximityScore).toBe(125);
+    expect(tr.finish(end({ crashed: true, landingClass: 'crash' })).proximityScore).toBe(240);
   });
 });
 
