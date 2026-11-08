@@ -35,6 +35,7 @@ export class PerfOverlay {
   private lastDrawS = 0;
   private tris = 0;
   private calls = 0;
+  private base: { builds: number; evicted: number } | null = null;
 
   constructor(
     private readonly renderer: WebGLRenderer,
@@ -60,6 +61,11 @@ export class PerfOverlay {
     window.addEventListener('keydown', (e) => {
       if (e.code === 'KeyP') this.el.style.display = this.el.style.display === 'none' ? '' : 'none';
     });
+  }
+
+  /** Zeroes the "since GO" counters (called when a flight starts) so a screenshot shows churn during the flight alone. */
+  markFlightStart(t: TerrainStats): void {
+    this.base = { builds: t.geometryBuildsTotal, evicted: t.texturesEvicted };
   }
 
   /** Starts timing this frame's GPU work (call before World.frame). */
@@ -118,11 +124,14 @@ export class PerfOverlay {
     this.lastDrawS = nowS;
     const s = this.sample();
     const c = this.renderer.domElement;
+    const since = this.base
+      ? `  since GO: builds ${t.geometryBuildsTotal - this.base.builds}, evicted ${t.texturesEvicted - this.base.evicted}`
+      : '';
     this.el.textContent = [
       `${s.fps.toFixed(1)} fps  ${s.frameMsMean.toFixed(2)} ms  p95 ${s.frameMsP95.toFixed(2)} ms  cpu ${s.cpuMsMean.toFixed(2)} ms  gpu ${s.gpuMsMean.toFixed(2)} ms (p95 ${s.gpuMsP95.toFixed(2)})`,
       `tris ${(s.triangles / 1000).toFixed(0)}k  calls ${s.drawCalls}  chunks ${t.chunks} [${t.chunksPerLod.join(' ')}]`,
-      `height tiles ${t.heightTilesLoaded}/${t.heightTilesTotal}  textures ${t.texturesResident} resident, ${t.texturesLoading} loading, ${t.texturesEvicted} evicted`,
-      `queued ${t.requestsQueued}  fetched ${t.mbFetched.toFixed(1)} MB  measuring ${t.pendingMeasurements}  builds ${t.geometryBuildsThisFrame}`,
+      `height tiles ${t.heightTilesLoaded}/${t.heightTilesTotal}  textures ${t.texturesResident} resident, ${t.texturesLoading} loading, evicted ${t.texturesEvicted}`,
+      `queued ${t.requestsQueued}  fetched ${t.mbFetched.toFixed(1)} MB  measuring ${t.pendingMeasurements}  builds ${t.geometryBuildsThisFrame} (total ${t.geometryBuildsTotal})  ${t.settled ? 'settled' : 'busy'}${since}`,
       `${c.width}x${c.height}  AGL ${t.cameraAglM.toFixed(0)} m  ${this.gpu}`,
       extra,
     ].join('\n');
