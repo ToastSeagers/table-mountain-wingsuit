@@ -4,7 +4,12 @@ import { InputManager } from '../core/InputManager';
 import { Persistence } from '../core/Persistence';
 import { SettingsStore, type QualityPreset, type Settings } from '../core/Settings';
 import type { NavEvent } from '../core/inputMapping';
+import type { SurfaceKind } from '../audio/Canopy';
+import { GameAudio } from '../audio/GameAudio';
+import { CameraEffects, introEase } from '../fx/CameraEffects';
 import { PlayerAvatar } from '../fx/PlayerAvatar';
+import { PostStack, type PostParams } from '../fx/PostStack';
+import { ReplayDirector } from '../fx/ReplayDirector';
 import { ZoneMarkers } from '../fx/ZoneMarkers';
 import type { Quat, Vec3 } from '../types/math';
 import { CountdownScreen } from '../ui/CountdownScreen';
@@ -82,6 +87,9 @@ export class Game {
   readonly avatar = new PlayerAvatar();
   readonly markers: ZoneMarkers;
   readonly loop = new FixedStepLoop();
+  readonly post: PostStack;
+  readonly camFx: CameraEffects;
+  readonly audio: GameAudio;
   run: RunController | null = null;
   auto: boolean;
 
@@ -130,6 +138,7 @@ export class Game {
   private endHoldS = -1;
   private prox = 0;
   private hadPointerLock = false;
+  private director: ReplayDirector | null = null;
   private replay: { player: ReplayPlayer; t: number; hold: number; lastP: Vec3 | null; attract: boolean } | null = null;
 
   private constructor(
@@ -147,6 +156,16 @@ export class Game {
     this.markers.setVisible(false);
     world.scene.add(this.avatar.group, this.markers.group);
     this.input = new InputManager(world.renderer.domElement);
+    this.post = new PostStack(world.renderer);
+    world.renderHook = (scene, camera) => this.post.render(scene, camera, this.postParams());
+    this.camFx = new CameraEffects(this.rig, this.bus);
+    this.audio = new GameAudio({
+      bus: this.bus,
+      settings: this.settings,
+      flightState: () => (this.run && this.machine.state !== 'title' ? this.run.state : null),
+      worldActive: () => this.machine.state === 'flying' && !this.machine.paused && !this.machine.settingsOpen,
+      surfaceAt: () => this.surfaceAtPilot(),
+    });
 
     this.screens = {
       title: new TitleScreen(ctx, (c) => this.onTitleChoice(c), () => this.startAttract()),
@@ -178,6 +197,8 @@ export class Game {
       if (this.machine.state === 'highScoreEntry' && !this.machine.settingsOpen) this.screens.entry.handleKey(e);
       if (opts.dev) this.onDevKey(e);
     });
+    this.screens.settings.addRow({ kind: 'info', label: 'AUDIO', text: () => (this.audio.engine.running ? 'ON' : 'PRESS ANY KEY') });
+    this.screens.settings.addRow({ kind: 'info', label: 'REDUCED MOTION', text: () => (this.camFx.reducedMotion ? 'ON (OS)' : 'OFF') });
     this.settings.onChange((s) => this.applySettings(s));
     this.applySettings(this.settings.value);
 
@@ -234,6 +255,7 @@ export class Game {
     const t0 = performance.now();
     this.clockS += dtS;
     this.input.poll(dtS);
+    this.camFx.update(dtS, this.subject);
     this.syncOverlays();
     const state = this.machine.state;
     const paused = this.machine.paused || this.machine.settingsOpen;
@@ -272,6 +294,7 @@ export class Game {
       }
     }
 
+    this.audio.update();
     this.overlay?.gpuBegin();
     this.world.frame(this.clockS);
     this.overlay?.gpuEnd();
@@ -355,6 +378,12 @@ export class Game {
 
   private onNav(e: NavEvent): void {
     this.screens.title.poke();
+    if (e === 'skip' && this.replay && !this.replay.attract && this.director) {
+      this.replay.t = this.director.nextShotStart(this.replay.t);
+      this.director.restart();
+      this.replay.lastP = null;
+      return;
+    }
     if (this.replay?.attract) {
       this.stopReplay();
       return;
@@ -517,7 +546,7 @@ export class Game {
     if (!sel) return;
     this.introT += dtS;
     const dur = sel.exit.intro.durationS;
-    this.applyPose(this.rig.introPose(this.introT / dur, sel.exit.position, sel.headingDeg, sel.exit.intro.cameraPath));
+    this.applyPose(this.rig.introPose(introEase(this.introT / dur), sel.exit.position, sel.headingDeg, sel.exit.intro.cameraPath));
     this.ledgePose(sel.exit, sel.headingDeg);
     if (this.introT >= dur) this.dispatch('SKIP_INTRO');
   }
@@ -686,6 +715,9 @@ export class Game {
     if (frames.length < 2) return;
     this.ui.classList.remove('black-bg');
     this.replay = { player: new ReplayPlayer(frames), t: 0, hold: 0, lastP: null, attract };
+    const sampler = this.world.terrain.sampler;
+    this.director = new ReplayDirector(frames, this.rig, (x, z) => sampler.peekHeight(x, z));
+    this.audio.setAttract(attract);
     const first = frames[0];
     this.subject.position = { ...first.p };
     this.subject.orientation = { ...first.q };
@@ -702,6 +734,8 @@ export class Game {
     if (!this.replay) return;
     const wasAttract = this.replay.attract;
     this.replay = null;
+    this.director = null;
+    this.audio.setAttract(false);
     if (wasAttract && this.machine.state === 'title') {
       this.screens.title.show();
       this.avatar.setVisible(false);
@@ -730,6 +764,7 @@ export class Game {
       this.subject.position = { ...f0.p };
       this.subject.orientation = { ...f0.q };
       this.rig.reset(this.subject);
+      this.director?.restart();
     }
     const pose = r.player.at(Math.min(r.t, end));
     const s = this.subject;
@@ -751,8 +786,10 @@ export class Game {
     s.aglM = Math.max(5, pose.p.y - this.world.terrain.sampler.peekHeight(pose.p.x, pose.p.z));
     s.gLoad = 1;
     s.bankDeg = 0;
-    const mode: CameraMode = r.t >= end ? 'landing' : pose.phase === 'canopy' || pose.phase === 'deploying' ? 'canopy' : 'chase';
-    this.applyPose(this.rig.update(dtS, mode, s));
+    const cam = this.director
+      ? this.director.update(r.t, dtS, s)
+      : this.rig.update(dtS, r.t >= end ? 'landing' : pose.phase === 'canopy' || pose.phase === 'deploying' ? 'canopy' : 'chase', s);
+    this.applyPose(cam);
     this.avatar.update(dtS, pose.p, pose.q, pose.phase);
   }
 
@@ -794,10 +831,32 @@ export class Game {
 
   private applySettings(s: Readonly<Settings>): void {
     this.world.applySettings(QUALITY[s.quality]);
+    this.post.setPreset(s.quality);
     this.rig.shakeEnabled = s.cameraShake;
     this.input.invertPitch = s.invertPitch;
     this.input.mouseSensitivity = s.mouseSensitivity;
     this.applyUiClasses();
+  }
+
+  private postParams(): PostParams {
+    const inReplay = this.machine.state === 'results' || !!this.replay;
+    return {
+      airspeedMps: this.subject.airspeedMps,
+      sunDir: this.world.uniforms.uSunDir.value,
+      vhs: this.settings.value.vhsOverlay && inReplay,
+      timeS: this.clockS,
+      reducedMotion: this.camFx.reducedMotion,
+    };
+  }
+
+  /** Surface under the pilot for the landing thump: a landing zone's surface, else rough ground. */
+  private surfaceAtPilot(): SurfaceKind {
+    const p = this.run?.state.position;
+    if (!p) return 'grass';
+    for (const z of this.zones.zones) {
+      if (Math.hypot(p.x - z.centre.x, p.z - z.centre.z) <= z.radiusM) return z.surface;
+    }
+    return 'rock';
   }
 
   private onCanvasClick(): void {
@@ -851,6 +910,9 @@ export class Game {
         this.startRunAt(e, headingDeg ?? e.headingDeg);
       },
       advance: (s: number, step?: number) => this.advance(s, step),
+      post: this.post,
+      audio: this.audio,
+      camFx: this.camFx,
     };
     (window as unknown as { __tmw: typeof hook }).__tmw = hook;
   }
