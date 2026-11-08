@@ -1,6 +1,7 @@
 import './style.css';
-import { startDemoScene } from './world/demo-scene';
+import { startWorld } from './world';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('#app missing');
-startDemoScene(root);
+const params = new URLSearchParams(window.location.search);
+void startWorld(root, { dev: params.get('dev') === '1', view: params.get('view') });
