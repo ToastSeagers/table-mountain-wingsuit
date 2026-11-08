@@ -1,4 +1,4 @@
-name: Deploy to GitHub Pages
+name: Check and deploy to GitHub Pages
 
 on:
   push:
@@ -15,7 +15,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Tests, lint and typecheck gate the deploy. Vitest fails when it finds no test files, so a green
+  # run means the suite executed, not merely that the job finished.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test -- --reporter=default --reporter=junit --outputFile=test-results.xml
+      - run: npm run lint
+      - run: npm run typecheck
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: test-results.xml
+
   build:
+    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

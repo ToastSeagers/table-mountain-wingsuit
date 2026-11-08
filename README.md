@@ -1,5 +1,7 @@
 # Table Mountain Wingsuit
 
+[![Check and deploy](https://github.com/ToastSeagers/table-mountain-wingsuit/actions/workflows/pages.yml/badge.svg)](https://github.com/ToastSeagers/table-mountain-wingsuit/actions/workflows/pages.yml)
+
 A browser game: jump from Table Mountain, fly a wingsuit down the real terrain, deploy, land at Camps Bay. Cinematic 3D world, old-school "California Games" interface.
 
 **Status:** planning complete, build not started. Progress tracker: https://claude.ai/artifact/4y7kfEUyNZVP5E54KU7iGN (source in `docs/status/tracker.html`).
