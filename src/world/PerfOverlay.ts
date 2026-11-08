@@ -124,6 +124,16 @@ export class PerfOverlay {
     this.lastDrawS = nowS;
     const s = this.sample();
     const c = this.renderer.domElement;
+    // A phone in landscape is about 360 px tall: smaller type, below the HUD's top row, never wider than the screen.
+    const compact = window.innerHeight < 500;
+    Object.assign(this.el.style, {
+      font: compact ? '10px/1.3 ui-monospace, Consolas, monospace' : '12px/1.35 ui-monospace, Consolas, monospace',
+      top: compact ? '64px' : '8px',
+      left: compact ? '4px' : '8px',
+      maxWidth: 'calc(100vw - 16px)',
+      overflow: 'hidden',
+    } satisfies Partial<CSSStyleDeclaration>);
+    const gpu = compact ? this.gpu.replace(/^ANGLE \(/, '').slice(0, 28) : this.gpu;
     const since = this.base
       ? `  since GO: builds ${t.geometryBuildsTotal - this.base.builds}, evicted ${t.texturesEvicted - this.base.evicted}`
       : '';
@@ -132,7 +142,7 @@ export class PerfOverlay {
       `tris ${(s.triangles / 1000).toFixed(0)}k  calls ${s.drawCalls}  chunks ${t.chunks} [${t.chunksPerLod.join(' ')}]`,
       `height tiles ${t.heightTilesLoaded}/${t.heightTilesTotal}  textures ${t.texturesResident} resident, ${t.texturesLoading} loading, evicted ${t.texturesEvicted}`,
       `queued ${t.requestsQueued}  fetched ${t.mbFetched.toFixed(1)} MB  measuring ${t.pendingMeasurements}  builds ${t.geometryBuildsThisFrame} (total ${t.geometryBuildsTotal})  ${t.settled ? 'settled' : 'busy'}${since}`,
-      `${c.width}x${c.height}  AGL ${t.cameraAglM.toFixed(0)} m  ${this.gpu}`,
+      `${c.width}x${c.height}  AGL ${t.cameraAglM.toFixed(0)} m  ${gpu}`,
       extra,
     ].join('\n');
   }
