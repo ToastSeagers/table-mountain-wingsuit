@@ -1,7 +1,3 @@
-
-> table-mountain-wingsuit@0.2.0-alpha.2 harness
-> tsx tools/flight-harness.ts all
-
 | Group | Quantity | Target | Measured | OK | Note |
 |---|---|---|---|---|---|
 | wingsuit | Start arc duration (glide > 2.5) | 3.5 s (3 to 4.5) | 4.33 s | yes | wingsuit phase at 2.51 s |
