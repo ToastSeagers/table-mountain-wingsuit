@@ -181,7 +181,11 @@ p {
   align-items: center;
   justify-content: center;
   gap: 2.5rem;
-  background: radial-gradient(ellipse at center, rgba(27, 18, 48, 0) 35%, rgba(27, 18, 48, 0.55) 100%);
+  background: radial-gradient(
+    ellipse at center,
+    rgba(27, 18, 48, 0) 35%,
+    rgba(27, 18, 48, 0.55) 100%
+  );
 }
 
 .logo {
@@ -543,6 +547,38 @@ p {
 .controls b {
   font-weight: normal;
   color: var(--c-sun);
+}
+
+.controls-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.controls-card .hint {
+  font-size: 0.65rem;
+  color: var(--c-paper);
+  text-align: center;
+  max-width: 34rem;
+  line-height: 1.6;
+}
+
+.controls-card.hidden,
+.menu.hidden {
+  display: none;
+}
+
+.pause .controls-card {
+  margin-top: 0.5rem;
+  cursor: pointer;
+}
+
+/* On the countdown the hint sits over the world, so it gets the card's own backing. */
+.countdown .controls-card .hint {
+  background: var(--c-ink-80);
+  border: 2px solid var(--c-paper);
+  padding: 0.6rem 1rem;
 }
 
 /* ---- HUD ---- */

@@ -177,9 +177,17 @@ export class ResultsScreen extends Screen {
     // FEEDBACK sits right after a run, when the opinion is fresh; it opens the form in a new tab and
     // leaves this screen as it is.
     const feedback = this.showFeedback ? [{ id: 'feedback', label: 'FEEDBACK' }] : [];
+    // A qualifying run still offers the other exits (playtest note 21): the Game saves the score
+    // under the last initials when the player leaves without entering new ones.
     this.menu.setItems(
       this.qualifies
-        ? [{ id: 'continue', label: 'NEW HIGH SCORE!' }, ...feedback]
+        ? [
+            { id: 'continue', label: 'NEW HIGH SCORE!' },
+            { id: 'again', label: 'JUMP AGAIN' },
+            { id: 'change', label: 'CHANGE EXIT' },
+            ...feedback,
+            { id: 'title', label: 'TITLE' },
+          ]
         : [
             { id: 'again', label: 'JUMP AGAIN' },
             { id: 'change', label: 'CHANGE EXIT' },

@@ -33,6 +33,9 @@ import { World } from '../world/World';
 import { Autopilot } from './Autopilot';
 import { CameraRig, type CameraMode, type CameraPose, type CameraSubject } from './CameraRig';
 import { CountdownGate } from './CountdownGate';
+
+/** Persistence key: the player has been shown the controls card once and pressed on. */
+const CONTROLS_SEEN = { name: 'controls-seen', version: 1 };
 import { ExitRegistry, type ExitDef } from './ExitRegistry';
 import { GameStateMachine, type GameEvent, type GameState } from './GameStateMachine';
 import { LandingZoneRegistry } from './LandingZoneRegistry';
@@ -511,6 +514,8 @@ export class Game {
         break;
       case 'countdown':
         if (e === 'back') this.dispatch('BACK');
+        else if (this.holdForControls && (e === 'confirm' || e === 'skip'))
+          this.releaseControlsHold();
         break;
       case 'flying':
         if (e === 'pause' || e === 'back') this.dispatch('PAUSE');
@@ -596,6 +601,9 @@ export class Game {
   }
 
   private onResultsChoice(c: 'continue' | 'again' | 'change' | 'title' | 'feedback'): void {
+    // Leaving a qualifying tally without entering initials still records the score (playtest note 21).
+    if (this.pendingQualifies && c !== 'continue' && c !== 'feedback')
+      this.saveScore(this.lastInitials);
     if (c === 'continue') this.dispatch('ENTER_INITIALS');
     else if (c === 'again') this.dispatch('JUMP_AGAIN');
     else if (c === 'change') this.dispatch('CHANGE_EXIT');
@@ -641,19 +649,23 @@ export class Game {
   }
 
   private onInitials(initials: string): void {
+    this.lastInitials = initials;
+    this.saveScore(initials);
+    this.dispatch('SCORE_SAVED');
+  }
+
+  private saveScore(initials: string): void {
     const out = this.run?.outcome;
     const exit = this.selected?.exit;
-    if (out && exit) {
-      this.lastInitials = initials;
-      this.lastRank = this.profile.addScore(
-        exit.id,
-        initials,
-        out.result.total,
-        out.result.recordedAt,
-      );
-      this.bus.emit('fanfare');
-    }
-    this.dispatch('SCORE_SAVED');
+    if (!out || !exit || !this.pendingQualifies) return;
+    this.pendingQualifies = false;
+    this.lastRank = this.profile.addScore(
+      exit.id,
+      initials,
+      out.result.total,
+      out.result.recordedAt,
+    );
+    this.bus.emit('fanfare');
   }
 
   // Settings overlay is not a state, so hide/show it with the machine flag.
@@ -767,6 +779,15 @@ export class Game {
     this.countdownT = 0;
     this.countdownShown = -1;
     this.gate.reset();
+    // A first-ever flight holds at the cheat sheet until a press (playtest note 22); autopilot runs never wait.
+    this.holdForControls =
+      !this.auto &&
+      !this.persistence.load(
+        CONTROLS_SEEN.name,
+        CONTROLS_SEEN.version,
+        (r) => (r === true ? true : null),
+        () => false,
+      );
     this.endHoldS = -1;
     this.prox = 0;
     this.input.reset();
@@ -826,6 +847,9 @@ export class Game {
     if (stage !== 'go') {
       this.screens.countdown.showWait('LOADING TERRAIN...');
       this.countdownShown = -1;
+    } else if (this.holdForControls) {
+      this.screens.countdown.showWait(this.input.touchUi ? 'TAP TO JUMP' : 'READY? PRESS ENTER');
+      this.countdownShown = -1;
     } else {
       this.countdownT += dtS;
       const n = 3 - Math.floor(this.countdownT / COUNTDOWN_STEP_S);
@@ -842,7 +866,13 @@ export class Game {
     }
     this.copySubject(run, this.subject);
     this.applyPose(this.rig.update(dtS, 'chase', this.subject));
-    this.avatar.update(dtS, run.state.position, run.state.orientation, 'wingsuit', this.liveCue(run));
+    this.avatar.update(
+      dtS,
+      run.state.position,
+      run.state.orientation,
+      'wingsuit',
+      this.liveCue(run),
+    );
   }
 
   private preloadSettled(): boolean {
@@ -970,6 +1000,13 @@ export class Game {
   }
 
   private pendingQualifies = false;
+  /** Countdown waits at the controls card until a press, on the first flight this browser has seen. */
+  private holdForControls = false;
+
+  private releaseControlsHold(): void {
+    this.holdForControls = false;
+    this.persistence.save(CONTROLS_SEEN.name, CONTROLS_SEEN.version, true);
+  }
 
   // ----- results / replay ----------------------------------------------------------------
 
