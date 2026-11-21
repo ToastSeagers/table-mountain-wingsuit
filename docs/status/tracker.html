@@ -227,6 +227,15 @@
              'No depth or lighting artefacts with float-linear and clip-control forced off',
              'Owner’s phone: steady frame rate in flight, time to title under 15 s',
              'Desktop keyboard, mouse, gamepad unchanged at 60 fps'] },
+    { id: 's8', n: 8, name: 'Avatar, canopy and dynamic glide (v0.2)', role: 'Stage 8 Engineer', brief: 'docs/agents/08-avatar-canopy-glide.md',
+      model: 'Fable 5.1', effort: 'high', mode: 'auto', deps: ['s7'], parallel: [],
+      gate: ['Procedural pilot under 3,000 triangles, pose follows bank, pitch, flare and deploy',
+             'Lit seven-cell canopy under 2,000 triangles with inflation and brake deflection (playtest note 5)',
+             'Glide ratio emerges from the polar: trim 3.0, best 3.3 to 3.5, full dive 1.5 or less',
+             'All three exits land by autopilot without moving an exit',
+             'Tests extended; test, lint, typecheck, build green',
+             'No mobile preset regression',
+             'Report with before and after screenshots, tuning table, perf numbers'] },
   ];
   const STATUS_LABEL = { pending: 'Pending', in_progress: 'In progress', blocked: 'Blocked', done: 'Done' };
   const TOTAL_GATES = STAGES.reduce((a, s) => a + s.gate.length, 0);
