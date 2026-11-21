@@ -135,6 +135,10 @@ A r/vibecoding commenter warned that a green check can pass without running anyt
 4. Items that are clear and small feed the next stage brief; anything that needs a design decision goes to the owner with a recommendation.
 5. The version in the technical line separates feedback on this alpha from later builds; when the game changes materially, start a new section in this file.
 
+## 4a. Triage log
+
+- 2026-11-21: 1 response (2026-11-09, desktop Safari on macOS). Items 20 to 24 added to `docs/status/playtest-notes.md`: how to score, no way back to exit select before initials, controls card too brief, first Safari data point, play-again 1 versus feel 4. The responses sheet is now shared with the owner's work account so the Orchestrator can read it through the Sheets connector.
+
 ## 5. Form details
 
 Created 2026-11-08 under the owner's personal Google account by running `create-form.gs` in Apps Script (project "TMW feedback form").
