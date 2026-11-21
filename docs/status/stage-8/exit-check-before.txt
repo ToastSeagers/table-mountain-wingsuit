@@ -1,0 +1,9 @@
+the-table h265 -> camps-bay-beach: landed class=ok t=131.3 pos=(-3002,104) dist2zone=7 minAGL=0.0 score=6767 zone=camps-bay-beach bonuses=clean,apostles
+the-table h265 -> the-glen: landed class=ok t=92.8 pos=(-2901,-576) dist2zone=22 minAGL=0.0 score=7425 zone=the-glen bonuses=clean,late
+platteklip h350 -> upper-orange: landed class=ok t=211.0 pos=(435,-1238) dist2zone=28 minAGL=0.0 score=4680 zone=upper-orange bonuses=clean
+platteklip h350 -> uct-fields: landed class=soft t=108.3 pos=(874,851) dist2zone=4036 minAGL=0.0 score=2543 zone=null bonuses=clean,gorge
+platteklip h350 -> tafelberg-road: landed class=ok t=112.8 pos=(213,250) dist2zone=16 minAGL=0.0 score=3257 zone=tafelberg-road bonuses=clean
+lions-head h275 -> sea-point-prom: landed class=soft t=25.4 pos=(-2253,-1793) dist2zone=1584 minAGL=0.0 score=1220 zone=null bonuses=clean
+lions-head h240 -> sea-point-prom: landed class=soft t=30.7 pos=(-2255,-1688) dist2zone=1685 minAGL=0.0 score=1599 zone=null bonuses=clean,late
+lions-head h275 -> clifton: landed class=ok t=125.6 pos=(-3290,-1009) dist2zone=10 minAGL=0.0 score=3759 zone=clifton bonuses=clean
+lions-head h240 -> clifton: landed class=hard t=72.6 pos=(-3287,-987) dist2zone=24 minAGL=0.0 score=3877 zone=clifton bonuses=clean

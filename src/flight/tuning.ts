@@ -114,31 +114,31 @@ export const WINGSUIT = {
   alignFloorDegPerS: 40,
   /** Alpha-command spring gain, 1/s. Full input reaches its alpha in about 0.5 s. */
   alphaGainPerS: 4.5,
-  // --- Pitch input commands a flight-path angle (the pilot flies the glide; an alpha spring
-  //     does the rest). Holding an input then converges first-order on its steady speed instead
-  //     of riding a 20 s phugoid, and release returns to trim in a few seconds.
-  /** Flight-path angle below the horizon at zero input: glide 3.0 (spec table). */
-  trimGammaDeg: 18.43,
-  /** Full nose-up asks for a 9 deg path (glide 6.3), which cannot be sustained: the suit
-   *  slows past max glide into mush, which is feel #2. */
-  upGammaRangeDeg: 9.4,
-  /** Full nose-down asks for a 75 deg path. The curve exponent puts half input at about 41 deg
-   *  (glide 1.2, the spec's "steep dive" note). */
-  maxDiveGammaDeg: 75,
-  diveGammaExponent: 1.3,
-  /** Outer-loop gain: alpha per degree of path error, on top of the feed-forward alpha. */
-  pathGainDegPerDeg: 0.6,
-  /** The pilot aims steeper when slower than the commanded path's equilibrium speed and
-   *  flatter when faster, deg of path per m/s. Trades height for speed after the arc and
-   *  after a flare instead of waiting on the 7 s speed time constant. */
-  speedToPathGainDegPerMps: 0.6,
-  speedToPathMaxDeg: 15,
-  /** Path-rate damping: alpha per deg/s of path rotation (clamped), the pilot's feel. */
-  pathDampingDegPerDegPerS: 0.3,
-  pathDampingMaxDeg: 4,
-  /** Low-pass on the measured path rate before it feeds the damping (breaks the one-step
-   *  algebraic loop that would otherwise oscillate at 120 Hz). */
-  pathRateFilterS: 0.25,
+  // --- Pitch input commands a body attitude (Stage 8). The pilot holds a pitch attitude; the
+  //     angle of attack is attitude minus flight path, so lift, drag and therefore the glide
+  //     ratio follow from the polar and the current path instead of being commanded. Attitude
+  //     hold is a strong phugoid damper (alpha falls as the path rises), which is why the Stage
+  //     3 path-angle loop and its speed term are no longer needed. The trim attitude is derived
+  //     in aero.ts: trim alpha minus the trim path angle the polar gives (about -14.7 deg).
+  /** Full nose-up raises the attitude this much above trim. From trim that is alpha 15.7 deg,
+   *  near the stall: a hard float that bleeds speed, then mush as the path steepens. */
+  pitchUpRangeDeg: 12,
+  /** Full nose-down lowers the attitude this much below trim (about -70 deg). The polar's
+   *  steady glide there is about 0.4 and the fold plus the flutter wall hold 76 m/s. */
+  pitchDownRangeDeg: 55,
+  /** Input curve on the nose-down side: half input gives about -37 deg of attitude, where the
+   *  polar's steady glide is about 1.3 (the spec's "steep dive, glide about 1.2"). */
+  diveInputExponent: 1.3,
+  /** Alpha protection: the pilot never lets the body exceed this angle of attack, whatever the
+   *  attitude command says (spec section 4 "soft stall past 18 degrees"). Without it a held
+   *  attitude while slowing would walk into a flat deep stall at 27 m/s. */
+  alphaProtectDeg: 20,
+  /** Hands-off speed trim: with the stick centred the pilot drops the nose this many degrees
+   *  per m/s below the trim airspeed (and raises it above), capped, fading with any pitch
+   *  input. A pure attitude hold is so well damped that the suit took 25 s to reach trim speed
+   *  after the catch; this is the pilot diving for speed. Steady state is unchanged. */
+  speedTrimDegPerMps: 0.8,
+  speedTrimMaxDeg: 10,
   /** Nose-down input folds the wing (arms and legs in): S_eff x (1 - diveFoldMax * |pitch|).
    *  Half the area at full nose-down is what lets the dive test reach 70 m/s in 6 s. */
   diveFoldMax: 0.5,
@@ -159,6 +159,16 @@ export const WINGSUIT = {
   buffetDragFraction: 0.3,
   /** ... with the total aero force (lift plus buffet drag) never above this many g. */
   gMaxTotal: 3.9,
+} as const;
+
+/**
+ * Ground effect (research note section 2.6, Volo's float near the deck as a feel device).
+ * Lift is multiplied by 1 + maxLiftGain * (1 - agl / heightM)^2 under heightM of AGL. Off by
+ * default (maxLiftGain 0) until a human judges it in play; the note suggests 1.0 to 1.3 over 20 m.
+ */
+export const GROUND_EFFECT = {
+  maxLiftGain: 0,
+  heightM: 20,
 } as const;
 
 /** Parachute opening sequence (spec sections 3 and 4). */
@@ -198,6 +208,8 @@ export const CANOPY = {
   bankLagS: 0.4,
   /** Turn authority lost in brakes (spec: "turns slower"). */
   bankBrakeLoss: 0.4,
+  /** Tail deflection the visual shows for held brakes (a flare shows 1). Look only. */
+  brakeVisualDeflection: 0.55,
   // --- Flare (spec: hold in the last 3-4 m; soft = vertical under 1.5 and forward under 5).
   //     Holding flare asks the canopy for the lift that holds flareTargetSinkMps, up to
   //     flareClGain of extra CL (the pilot swinging forward under a canopy pitched back), and

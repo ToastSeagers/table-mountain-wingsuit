@@ -61,6 +61,8 @@ export class FlightModelImpl implements FlightModel {
     st.lowPull = false;
     st.landing = null;
     st.flareEnergy = 1;
+    st.openingProgress = 0;
+    st.brakeDeflection = 0;
     this.wing.reset();
     this.canopy.reset();
     this.prevDeploy = false;

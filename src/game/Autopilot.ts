@@ -17,6 +17,14 @@ export interface AutopilotOptions {
   cruisePitch?: number;
   /** Largest roll input the autopilot uses, 0 to 1. Gentle turns keep more energy. */
   maxRoll?: number;
+  /** Under canopy below this AGL the turn is limited, and under a third of it the wings are
+   *  level for the flare: no low turns, as a real canopy pilot flies it (Stage 8). */
+  lowTurnAglM?: number;
+  /** Largest roll input under canopy: half input is a 27 deg bank, enough to circle down over a
+   *  zone without the forward speed a 55 deg bank adds. */
+  canopyMaxRoll?: number;
+  /** AGL under which canopyMaxRoll applies; above it the spiral may use maxRoll. */
+  canopyRollCapAglM?: number;
 }
 
 const DEG = 180 / Math.PI;
@@ -40,7 +48,7 @@ export class Autopilot {
   private lastAglM = Infinity;
 
   constructor(options: AutopilotOptions) {
-    this.o = { deployAglM: 130, flareAglM: 3.5, earlyDiveS: 2.5, straightS: 8, cruisePitch: 0.15, maxRoll: 1, ...options };
+    this.o = { deployAglM: 130, flareAglM: 3.5, earlyDiveS: 2.5, straightS: 8, cruisePitch: 0.15, maxRoll: 1, lowTurnAglM: 15, canopyMaxRoll: 0.5, canopyRollCapAglM: 60, ...options };
   }
 
   /** Writes this step's input. `input` is mutated in place. */
@@ -70,7 +78,14 @@ export class Autopilot {
       const lowPull = st.elapsedS > 6 && st.aglM <= this.o.deployAglM && (closing || st.aglM <= this.o.deployAglM / 2);
       input.deploy = st.phase === 'wingsuit' && (reachable || lowPull);
     } else if (st.phase === 'deploying' || st.phase === 'canopy') {
-      input.roll = rollCmd;
+      // Spiralling off spare height is fine up high; low, the bank would carry into the flare
+      // (a 55 deg bank adds 3 m/s of forward speed, which is the difference between an ok landing
+      // and a crash by the classification table), so the turn fades out and the flare is level.
+      const low = this.o.lowTurnAglM;
+      const turnScale = st.aglM >= low ? 1 : st.aglM <= low / 3 ? 0 : (st.aglM - low / 3) / (low - low / 3);
+      // Full roll (a tight spiral) is allowed while high; under canopyRollCapAglM the cap applies.
+      const cap = st.aglM >= this.o.canopyRollCapAglM ? this.o.maxRoll : this.o.canopyMaxRoll;
+      input.roll = Math.max(-cap, Math.min(cap, rollCmd)) * turnScale;
       input.flare = st.phase === 'canopy' && st.aglM <= this.o.flareAglM;
     }
     this.lastAglM = st.aglM;

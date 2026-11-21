@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
-  alphaForGlide,
   areaRamp,
+  attitudeCommandDeg,
   controlAuthority,
   dragCoefficient,
-  equilibriumSpeedForGlide,
   liftCoefficient,
   mushFactor,
+  steadyAirspeed,
+  steadyGlide,
+  trimAttitudeDeg,
 } from './aero';
 import { WINGSUIT as W } from './tuning';
 
@@ -102,10 +104,18 @@ describe('control authority, mush, area ramp', () => {
     expect(areaRamp(1.5, 40)).toBeCloseTo(W.areaRampStart + 0.7 * 0.5, 9);
   });
 
-  it('inverts the polar for the pilot feed-forward', () => {
-    expect(alphaForGlide(3)).toBeCloseTo(W.trimAlphaDeg, 1);
-    expect(equilibriumSpeedForGlide(3)).toBeCloseTo(45, 0);
-    expect(alphaForGlide(10)).toBeGreaterThan(alphaForGlide(3));
-    expect(alphaForGlide(0.3)).toBeLessThan(0);
+  it('steady-state views of the polar give the trim anchors', () => {
+    expect(steadyGlide(W.trimAlphaDeg)).toBeCloseTo(3.0, 1);
+    expect(steadyAirspeed(W.trimAlphaDeg)).toBeCloseTo(45, 0);
+  });
+
+  it('the attitude command is trim at zero input, nose up and down with the stick', () => {
+    const trim = trimAttitudeDeg();
+    expect(trim).toBeLessThan(0);
+    expect(trim).toBeGreaterThan(-20);
+    expect(attitudeCommandDeg(0)).toBeCloseTo(trim, 9);
+    expect(attitudeCommandDeg(1)).toBeCloseTo(trim + W.pitchUpRangeDeg, 9);
+    expect(attitudeCommandDeg(-1)).toBeCloseTo(trim - W.pitchDownRangeDeg, 9);
+    expect(attitudeCommandDeg(-0.5)).toBeGreaterThan(trim - W.pitchDownRangeDeg / 2);
   });
 });
