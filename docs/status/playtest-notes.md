@@ -11,7 +11,7 @@ Collected by the Orchestrator across Gates 2 to 5 (2026-11-08), from autopilot r
 ## P2
 
 4. **Sun glitter column.** The sun's reflection on the sea is a tall, hard white pillar (visible from The Table and Lion's Head exits). Bloom and shafts in Stage 5 make it dominate seaward frames. Narrow and dim the glint in `src/world` sea shading (`Sea.ts`, `TerrainMaterial.ts` sea branch) and recheck shaft strength.
-5. **Canopy reads as a dark slab** in replay and landing-cam shots (Stage 4 raised the emissive but did not recheck). Give it a lit, slightly translucent material or a simple two-tone cell texture.
+5. **Resolved in Stage 8 (v0.2.0-alpha.4): lit, translucent seven-cell canopy.** Original note: Canopy reads as a dark slab in replay and landing-cam shots (Stage 4 raised the emissive but did not recheck). Give it a lit, slightly translucent material or a simple two-tone cell texture.
 6. **Blank-coverage patch off Clifton** in the City aerial reads as a pale island near x -3,300, z -1,400 (Stage 2 known issue 2). Fix in the Stage 1 sea mask (`tools/terrain/build.py`: flood that patch to 0 m and re-fill colour) and regenerate only the affected tiles, or mask it in the shader if the rebuild is too slow.
 7. **Ear test.** Nobody has listened to the mix on headphones. Check wind level against the altimeter beeps, the opening snap, the title loop level, and that the wipeout sting is not painful. Adjust gains in `src/audio/`.
 8. **Physical gamepad.** Only a mocked pad has been tested. Try menus, a full flight, deploy and flare, and pause with a real controller.
