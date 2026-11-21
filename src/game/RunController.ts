@@ -126,6 +126,7 @@ export class RunController {
   /** One fixed step with an already-formed FlightInput. */
   step(dtS: number, input: FlightInput): void {
     if (!this.started || this.outcome) return;
+    if (input !== this.input) Object.assign(this.input, input);
     this.copyPose(this.prev);
     const st = this.model.step(dtS, input, this.opts.terrain);
     this.tracker.step(dtS, st, input.pitch);
@@ -144,6 +145,11 @@ export class RunController {
     } else if (p.x < this.bounds.minX || p.x > this.bounds.maxX || p.z < this.bounds.minZ || p.z > this.bounds.maxZ) {
       this.finish('out-of-bounds', true);
     }
+  }
+
+  /** The input the model was last stepped with (for the avatar's pose). */
+  get lastInput(): Readonly<FlightInput> {
+    return this.input;
   }
 
   /** Style stamps earned since the last call. */

@@ -17,11 +17,11 @@ export interface AutopilotOptions {
   cruisePitch?: number;
   /** Largest roll input the autopilot uses, 0 to 1. Gentle turns keep more energy. */
   maxRoll?: number;
-  /** Under canopy below this AGL the turn is limited, and under a third of it the wings are
+  /** Under canopy below this AGL the turn fades out, and under a third of it the wings are
    *  level for the flare: no low turns, as a real canopy pilot flies it (Stage 8). */
   lowTurnAglM?: number;
-  /** Largest roll input under canopy: half input is a 27 deg bank, enough to circle down over a
-   *  zone without the forward speed a 55 deg bank adds. */
+  /** Largest roll input under canopy below canopyRollCapAglM: 0.6 is a 33 deg bank, enough to
+   *  circle down over a zone without the forward speed a 55 deg bank adds. */
   canopyMaxRoll?: number;
   /** AGL under which canopyMaxRoll applies; above it the spiral may use maxRoll. */
   canopyRollCapAglM?: number;
@@ -48,7 +48,7 @@ export class Autopilot {
   private lastAglM = Infinity;
 
   constructor(options: AutopilotOptions) {
-    this.o = { deployAglM: 130, flareAglM: 3.5, earlyDiveS: 2.5, straightS: 8, cruisePitch: 0.15, maxRoll: 1, lowTurnAglM: 15, canopyMaxRoll: 0.5, canopyRollCapAglM: 60, ...options };
+    this.o = { deployAglM: 130, flareAglM: 3.0, earlyDiveS: 2.5, straightS: 8, cruisePitch: 0.15, maxRoll: 1, lowTurnAglM: 10, canopyMaxRoll: 0.6, canopyRollCapAglM: 60, ...options };
   }
 
   /** Writes this step's input. `input` is mutated in place. */
