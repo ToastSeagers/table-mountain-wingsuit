@@ -37,6 +37,10 @@ export interface WingsuitFlightState extends FlightState {
   landing: LandingReport | null;
   /** Remaining flare, 0..1. 1 while not under canopy. */
   flareEnergy: number;
+  /** Canopy inflation, 0 before deploy, rising over the opening, 1 under canopy (Stage 8, for the avatar). */
+  openingProgress: number;
+  /** Tail deflection the canopy visual should show, 0..1: brakes held about half, flare full. */
+  brakeDeflection: number;
 }
 
 export function createFlightState(): WingsuitFlightState {
@@ -63,5 +67,7 @@ export function createFlightState(): WingsuitFlightState {
     lowPull: false,
     landing: null,
     flareEnergy: 1,
+    openingProgress: 0,
+    brakeDeflection: 0,
   };
 }

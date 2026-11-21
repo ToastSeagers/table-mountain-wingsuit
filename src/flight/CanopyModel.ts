@@ -149,6 +149,8 @@ export class CanopyModel {
     st.wingAreaFactor = 0;
     st.gLoad = gLoad;
     st.flareEnergy = 1;
+    st.openingProgress = Math.min(1, this.openingT / O.durationS);
+    st.brakeDeflection = 0;
 
     if (this.openingT >= O.durationS) {
       const gs = Math.hypot(v.x, v.z);
@@ -259,5 +261,9 @@ export class CanopyModel {
     st.wingAreaFactor = 0;
     st.gLoad = gLoad;
     st.flareEnergy = this.flareEnergy;
+    st.openingProgress = 1;
+    // What the toggles are doing, for the canopy visual: brakes are a part deflection, a held
+    // flare is full even once its energy is spent (the pilot is still pulling).
+    st.brakeDeflection = Math.max(C.brakeVisualDeflection * this.brakeBlend, input.flare ? 1 : 0);
   }
 }

@@ -1,11 +1,11 @@
 import type { FlightInput } from '../types/flight';
 import type { Vec3 } from '../types/math';
 import {
-  alphaForGlide,
   areaRamp,
+  attitudeCommandDeg,
   controlAuthority,
-  equilibriumSpeedForGlide,
   dragCoefficient,
+  groundEffectGain,
   liftCoefficient,
   mushFactor,
 } from './aero';
@@ -45,9 +45,6 @@ export class WingsuitModel {
   arcDoneS = -1;
 
   private rollRateDeg = 0;
-  private prevGammaDeg = 0;
-  private hasPrevGamma = false;
-  private gammaRateFiltered = 0;
   private readonly f: Vec3 = { x: 0, y: 0, z: -1 };
   private readonly u: Vec3 = { x: 0, y: 1, z: 0 };
   private readonly r: Vec3 = { x: 1, y: 0, z: 0 };
@@ -59,9 +56,6 @@ export class WingsuitModel {
     this.flyingSinceS = -1;
     this.arcDoneS = -1;
     this.rollRateDeg = 0;
-    this.prevGammaDeg = 0;
-    this.hasPrevGamma = false;
-    this.gammaRateFiltered = 0;
   }
 
   step(dt: number, input: FlightInput, st: WingsuitFlightState): void {
@@ -109,7 +103,6 @@ export class WingsuitModel {
     let betaDeg = 0;
     let mush = 0;
     let gammaDeg = 0;
-    let gammaRate = 0;
     let ax = 0;
     let ay = -g;
     let az = 0;
@@ -124,19 +117,11 @@ export class WingsuitModel {
       mush = mushFactor(speed) * settled;
       vscale(vhat, v, 1 / speed);
       gammaDeg = Math.asin(clamp(-vhat.y, -1, 1)) * RAD_TO_DEG;
-      if (this.hasPrevGamma) {
-        const raw = (gammaDeg - this.prevGammaDeg) / dt;
-        this.gammaRateFiltered +=
-          (raw - this.gammaRateFiltered) * Math.min(1, dt / W.pathRateFilterS);
-      }
-      gammaRate = this.gammaRateFiltered;
-      this.prevGammaDeg = gammaDeg;
-      this.hasPrevGamma = true;
 
       const cl = liftCoefficient(alphaDeg) * (1 - W.mushLiftLoss * mush);
       const cd = dragCoefficient(alphaDeg, cl, betaDeg, mush, speed);
       const qS = 0.5 * SIM.rhoKgM3 * speed * speed * area;
-      let lift = qS * cl * (1 + W.arcLiftBoost * (1 - settled));
+      let lift = qS * cl * (1 + W.arcLiftBoost * (1 - settled)) * groundEffectGain(st.aglM);
       let drag = qS * cd;
       const side = -qS * W.cySideslip * Math.sin(betaDeg * DEG_TO_RAD);
 
@@ -175,37 +160,23 @@ export class WingsuitModel {
     // --- Body rates.
     const auth = controlAuthority(speed);
 
-    // Pitch: the input commands a flight-path angle; the pilot turns the path error into an
-    // alpha command (feed-forward from the polar plus a proportional term and path-rate
-    // damping), and a rate-limited spring tracks that alpha. The spring is also the alignment
-    // that tilts the nose down the velocity in the start arc, where a fixed arc alpha is held
-    // until the path is caught.
-    const gammaInput =
-      pitchIn >= 0
-        ? W.trimGammaDeg - pitchIn * W.upGammaRangeDeg
-        : W.trimGammaDeg +
-          Math.pow(-pitchIn, W.diveGammaExponent) * (W.maxDiveGammaDeg - W.trimGammaDeg);
-    const glideInput = 1 / Math.tan(gammaInput * DEG_TO_RAD);
-    const speedCorrection = clamp(
-      W.speedToPathGainDegPerMps * (equilibriumSpeedForGlide(glideInput) - speed),
-      -W.speedToPathMaxDeg,
-      W.speedToPathMaxDeg,
-    );
-    const gammaCmd = clamp(gammaInput + speedCorrection, 0, W.maxDiveGammaDeg);
-    const alphaFF = alphaForGlide(1 / Math.tan(Math.max(gammaCmd, 1) * DEG_TO_RAD));
-    const kp = W.pathGainDegPerDeg * (1 - W.mushPitchLoss * mush);
-    const damping = clamp(
-      W.pathDampingDegPerDegPerS * gammaRate,
-      -W.pathDampingMaxDeg,
-      W.pathDampingMaxDeg,
-    );
-    const alphaLoop = alphaFF + kp * (gammaDeg - gammaCmd) + damping;
-    let alphaCmd = lerp(W.arcAlphaDeg, alphaLoop, settled);
-    alphaCmd = clamp(alphaCmd, W.negStallAlphaDeg, W.stallAlphaDeg + 2);
+    // Pitch: the input commands a body pitch attitude (nose above the horizon). The pilot's
+    // alpha target is that attitude plus the path angle below the horizon, limited by alpha
+    // protection, and a rate-limited spring tracks it. Nothing commands the glide: it is
+    // whatever lift and drag at the resulting alpha give, and holding an attitude damps the
+    // phugoid because alpha falls as the path rises. In the start arc a fixed arc alpha is held
+    // until the path is caught; the spring is also the alignment that tilts the nose down the
+    // velocity there.
+    const alphaAttitude =
+      attitudeCommandDeg(pitchIn, speed, 1 - W.diveFoldMax * Math.max(0, -pitchIn)) + gammaDeg;
+    const alphaLoop = clamp(alphaAttitude, W.negStallAlphaDeg, W.alphaProtectDeg);
+    const alphaCmd = lerp(W.arcAlphaDeg, alphaLoop, settled);
     const pitchLim = Math.max(W.alignFloorDegPerS, W.pitchRateTrimDegPerS * auth);
-    const pitchRate = flying
+    let pitchRate = flying
       ? clamp(W.alphaGainPerS * (alphaCmd - alphaDeg), -pitchLim, pitchLim)
       : 0;
+    // Mush: nose-up authority goes soft; nose-down, the recovery, keeps its rate.
+    if (pitchRate > 0) pitchRate *= 1 - W.mushPitchLoss * mush;
 
     // Roll: lagged rate command, halved in mush, plus auto-level when the stick is released.
     const rollCmd = rollIn * W.rollRateTrimDegPerS * auth * (1 - W.mushRollLoss * mush);

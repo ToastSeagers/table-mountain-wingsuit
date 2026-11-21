@@ -1,134 +1,111 @@
-import {
-  BoxGeometry,
-  BufferGeometry,
-  DoubleSide,
-  Float32BufferAttribute,
-  Group,
-  LineBasicMaterial,
-  LineSegments,
-  Mesh,
-  MeshLambertMaterial,
-  SphereGeometry,
-  CapsuleGeometry,
-} from 'three';
+import { Group, Vector3 } from 'three';
 import type { FlightPhase } from '../types/flight';
 import type { Quat, Vec3 } from '../types/math';
+import { fallbackLighting, type AvatarLighting } from './AvatarMaterial';
+import {
+  CanopyStateFilter,
+  MotionCueEstimator,
+  PilotPoseFilter,
+  type AvatarCue,
+} from './avatarPose';
+import { CanopyMesh } from './CanopyMesh';
+import { PilotMesh } from './PilotMesh';
 
-// Chrome palette (look spec section 2) reused for the pilot so the avatar reads against terrain.
-const SUN = 0xffb347;
-const INK = 0x1b1230;
-const CORAL = 0xff5e5b;
-const PAPER = 0xf4e9d2;
 /** Drawn larger than life so the pilot reads from the chase distance. */
-const SCALE = 1.5;
-const OPEN_S = 2.5;
-
-function wing(points: number[][]): BufferGeometry {
-  const g = new BufferGeometry();
-  const v: number[] = [];
-  for (const p of points) v.push(p[0], p[1], p[2]);
-  g.setAttribute('position', new Float32BufferAttribute(v, 3));
-  g.computeVertexNormals();
-  return g;
-}
+export const AVATAR_SCALE = 1.5;
 
 /**
- * The pilot as a small low-poly figure: lying flat in a wingsuit (head toward -Z, the flight
- * direction), hanging upright under a ram-air canopy after deploy. Built from primitives, no
- * assets. Forward is -Z, up +Y, right +X, matching the flight model's orientation.
+ * The player's pilot and canopy. The group takes the flight model's position and orientation
+ * (forward -Z, up +Y, right +X); inside it the pilot lies prone in the suit and swings upright
+ * under the canopy as the opening progresses. Pose and canopy state come from avatarPose.ts
+ * (pure, tested); PilotMesh and CanopyMesh turn them into geometry. Built from primitives and
+ * hand-built grids, no assets. Lighting shares the world's sun and sky uniforms.
  */
 export class PlayerAvatar {
   readonly group = new Group();
+  readonly pilot: PilotMesh;
+  readonly canopy: CanopyMesh;
   private readonly body = new Group();
-  private readonly suit = new Group();
-  private readonly canopy = new Group();
-  private readonly lines: LineSegments;
-  private phase: FlightPhase = 'freefall';
-  private phaseTimeS = 0;
+  private readonly poseFilter = new PilotPoseFilter();
+  private readonly canopyFilter = new CanopyStateFilter();
+  private readonly estimator = new MotionCueEstimator();
+  private readonly riserL = new Vector3();
+  private readonly riserR = new Vector3();
+  private readonly handL = new Vector3();
+  private readonly handR = new Vector3();
+  private lastPhase: FlightPhase | null = null;
 
-  constructor() {
-    const suitMat = new MeshLambertMaterial({ color: SUN, emissive: 0x331a00, side: DoubleSide });
-    const darkMat = new MeshLambertMaterial({ color: INK, emissive: 0x0a0618 });
-    const trimMat = new MeshLambertMaterial({ color: CORAL, emissive: 0x330c0b, side: DoubleSide });
-    const torso = new Mesh(new CapsuleGeometry(0.17, 0.75, 3, 8), suitMat);
-    torso.rotation.x = Math.PI / 2;
-    torso.position.z = 0.1;
-    const head = new Mesh(new SphereGeometry(0.15, 10, 8), darkMat);
-    head.position.set(0, 0.04, -0.62);
-    // Wing membranes: arm wings from shoulder to hand to hip, and the leg wing between the knees.
-    const left = new Mesh(wing([[-0.15, 0, -0.35], [-1.0, 0, -0.1], [-0.15, 0, 0.5]]), trimMat);
-    const right = new Mesh(wing([[0.15, 0, -0.35], [1.0, 0, -0.1], [0.15, 0, 0.5]]), trimMat);
-    const tail = new Mesh(wing([[-0.3, 0, 0.5], [0.3, 0, 0.5], [0, 0, 1.05]]), suitMat);
-    this.suit.add(left, right, tail);
-    this.body.add(torso, head, this.suit);
-
-    // Canopy: a strongly curved ram-air wing, with four lines down to the pilot.
-    const cg = new BoxGeometry(6, 0.3, 2.2, 14, 1, 1);
-    const pos = cg.getAttribute('position');
-    for (let i = 0; i < pos.count; i++) pos.setY(i, pos.getY(i) - 0.9 * (pos.getX(i) / 3) ** 2);
-    cg.computeVertexNormals();
-    const canopyMesh = new Mesh(cg, new MeshLambertMaterial({ color: PAPER, emissive: 0xb4a484, side: DoubleSide }));
-    const stripe = new Mesh(
-      new BoxGeometry(0.5, 0.06, 2.25),
-      new MeshLambertMaterial({ color: CORAL, emissive: 0x330c0b }),
-    );
-    stripe.position.y = 0.17;
-    this.canopy.add(canopyMesh, stripe);
-    this.canopy.position.y = 4.6;
-    const lineGeo = new BufferGeometry();
-    const lv: number[] = [];
-    for (const [x, z] of [[-2.8, -0.9], [-2.8, 0.9], [2.8, -0.9], [2.8, 0.9]]) lv.push(0, 0.3, 0, x, 4.6 - 0.9 * (x / 3) ** 2, z);
-    lineGeo.setAttribute('position', new Float32BufferAttribute(lv, 3));
-    this.lines = new LineSegments(lineGeo, new LineBasicMaterial({ color: PAPER }));
-    this.group.add(this.body, this.canopy, this.lines);
-    this.group.scale.setScalar(SCALE);
+  constructor(lighting: AvatarLighting = fallbackLighting()) {
+    this.pilot = new PilotMesh(lighting);
+    this.canopy = new CanopyMesh(lighting);
+    this.body.add(this.pilot.group);
+    // The canopy pivots at the risers, roughly the shoulders of the hanging pilot.
+    this.canopy.pivot.position.set(0, 0.3, 0);
+    this.group.add(this.body, this.canopy.pivot, this.canopy.lines);
+    this.group.scale.setScalar(AVATAR_SCALE);
     this.group.visible = false;
-    this.setCanopyVisible(false);
+    this.canopy.setVisible(false);
   }
 
-  /** Shows or hides the avatar (it is hidden in head cam and menus). */
+  /** Shows or hides the whole avatar (menus, some camera modes). */
   setVisible(v: boolean): void {
     this.group.visible = v;
   }
 
-  /** Places the avatar and animates the phase changes. `pose` is the interpolated flight pose. */
-  update(dtS: number, position: Vec3, orientation: Quat, phase: FlightPhase): void {
-    if (phase !== this.phase) {
-      this.phase = phase;
-      this.phaseTimeS = 0;
-    }
-    this.phaseTimeS += dtS;
-    this.group.position.set(position.x, position.y, position.z);
-    this.group.quaternion.set(orientation.x, orientation.y, orientation.z, orientation.w);
-
-    const t = Math.min(1, this.phaseTimeS / OPEN_S);
-    const ease = t * t * (3 - 2 * t);
-    switch (phase) {
-      case 'freefall':
-      case 'wingsuit':
-        this.body.rotation.x = 0;
-        this.setCanopyVisible(false);
-        this.suit.visible = true;
-        break;
-      case 'deploying':
-        // The pilot swings up to hang under the canopy while it inflates.
-        this.body.rotation.x = (Math.PI / 2) * ease;
-        this.setCanopyVisible(true, 0.15 + 0.85 * ease);
-        this.suit.visible = ease < 0.5;
-        break;
-      default:
-        this.body.rotation.x = Math.PI / 2;
-        this.setCanopyVisible(true, 1);
-        this.suit.visible = false;
-    }
-    // Canopy settles to the ground after touchdown.
-    if (phase === 'landed') this.canopy.scale.y = Math.max(0.15, 1 - this.phaseTimeS * 0.6);
+  /** Hides the helmet for a camera inside it. */
+  setHeadVisible(v: boolean): void {
+    this.pilot.head.visible = v;
   }
 
-  private setCanopyVisible(v: boolean, scale = 1): void {
-    this.canopy.visible = v;
-    this.lines.visible = v;
-    this.canopy.scale.set(scale, scale, scale);
-    this.canopy.position.y = 4.6 * scale;
+  /** Triangle counts for the budget check (brief: pilot under 3,000, canopy under 2,000). */
+  triangleCount(): { pilot: number; canopy: number } {
+    return { pilot: this.pilot.triangleCount(), canopy: this.canopy.triangleCount() };
+  }
+
+  /** Forgets any previous run so a new run or replay starts from a clean pose. */
+  reset(): void {
+    this.estimator.reset();
+    this.canopyFilter.reset();
+    this.lastPhase = null;
+  }
+
+  /**
+   * Places the avatar and animates it. `cue` is the live flight state and input; omit it in
+   * replays and the motion estimator fills it in from the pose stream (`aglM` from the terrain
+   * helps it see the flare).
+   */
+  update(
+    dtS: number,
+    position: Vec3,
+    orientation: Quat,
+    phase: FlightPhase,
+    cue?: AvatarCue,
+    aglM = 500,
+  ): void {
+    this.group.position.set(position.x, position.y, position.z);
+    this.group.quaternion.set(orientation.x, orientation.y, orientation.z, orientation.w);
+    const c = cue ?? this.estimator.update(dtS, position, orientation, phase, aglM);
+    if (this.lastPhase === null) {
+      this.poseFilter.reset(c);
+      this.canopyFilter.reset();
+    }
+    this.lastPhase = phase;
+
+    const pose = this.poseFilter.update(c, dtS);
+    this.pilot.apply(pose);
+    // Prone in the suit at hang 0; feet down, facing forward, at hang 1.
+    this.body.rotation.x = (Math.PI / 2) * pose.hang;
+    this.body.position.set(0, 0.12 * pose.hang, 0);
+
+    const cs = this.canopyFilter.update(c, dtS);
+    if (cs.visible) {
+      this.body.updateMatrix();
+      const j = this.pilot.joints;
+      this.riserL.copy(j.shoulderL).applyMatrix4(this.body.matrix);
+      this.riserR.copy(j.shoulderR).applyMatrix4(this.body.matrix);
+      this.handL.copy(j.handL).applyMatrix4(this.body.matrix);
+      this.handR.copy(j.handR).applyMatrix4(this.body.matrix);
+    }
+    this.canopy.update(cs, this.riserL, this.riserR, this.handL, this.handR);
   }
 }

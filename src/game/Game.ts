@@ -9,6 +9,7 @@ import type { SurfaceKind } from '../audio/Canopy';
 import { GameAudio } from '../audio/GameAudio';
 import { CameraEffects, introEase } from '../fx/CameraEffects';
 import { PlayerAvatar } from '../fx/PlayerAvatar';
+import { defaultCue, type AvatarCue } from '../fx/avatarPose';
 import { PostStack, type PostParams } from '../fx/PostStack';
 import { ReplayDirector } from '../fx/ReplayDirector';
 import { ZoneMarkers } from '../fx/ZoneMarkers';
@@ -89,7 +90,8 @@ export class Game {
   readonly machine = new GameStateMachine('title');
   readonly input: InputManager;
   readonly rig: CameraRig;
-  readonly avatar = new PlayerAvatar();
+  readonly avatar: PlayerAvatar;
+  private readonly avatarCue: AvatarCue = defaultCue();
   readonly markers: ZoneMarkers;
   readonly loop = new FixedStepLoop();
   readonly post: PostStack;
@@ -184,6 +186,7 @@ export class Game {
     this.rig = new CameraRig((x, z) => sampler.peekHeight(x, z));
     this.markers = new ZoneMarkers(this.zones.zones, (x, z) => sampler.peekHeight(x, z));
     this.markers.setVisible(false);
+    this.avatar = new PlayerAvatar(world.uniforms);
     world.scene.add(this.avatar.group, this.markers.group);
     this.input = new InputManager(world.renderer.domElement);
     this.touch = new TouchControls(this.input);
@@ -771,6 +774,7 @@ export class Game {
     this.markers.rebuild();
     this.copySubject(this.run, this.subject);
     this.rig.reset(this.subject);
+    this.avatar.reset();
     this.avatar.setVisible(true);
     this.world.terrain.sampler.setReadyFocus(sel.exit.position.x, sel.exit.position.z);
     void this.preloadFor(sel.exit);
@@ -838,7 +842,7 @@ export class Game {
     }
     this.copySubject(run, this.subject);
     this.applyPose(this.rig.update(dtS, 'chase', this.subject));
-    this.avatar.update(dtS, run.state.position, run.state.orientation, 'wingsuit');
+    this.avatar.update(dtS, run.state.position, run.state.orientation, 'wingsuit', this.liveCue(run));
   }
 
   private preloadSettled(): boolean {
@@ -890,10 +894,16 @@ export class Game {
     }
 
     const st = run.state;
-    this.avatar.setVisible(
-      !(this.headCam && st.phase !== 'canopy' && st.phase !== 'deploying' && !run.ended),
+    // The head cam is a helmet-top mount just behind the helmet, so the whole pilot stays
+    // visible: the helmet at the bottom of the frame, hands and wing edges in the corners.
+    this.avatar.setVisible(true);
+    this.avatar.update(
+      paused ? 0 : dtS,
+      this.pose.position,
+      this.pose.orientation,
+      st.phase,
+      this.liveCue(run),
     );
-    this.avatar.update(paused ? 0 : dtS, this.pose.position, this.pose.orientation, st.phase);
     this.copySubject(run, this.subject);
     if (!paused) {
       let mode: CameraMode = 'chase';
@@ -989,6 +999,8 @@ export class Game {
     this.subject.velocity = { x: 0, y: 0, z: 0 };
     this.subject.airspeedMps = 40;
     this.rig.reset(this.subject);
+    this.avatar.reset();
+    this.avatar.setHeadVisible(true);
     this.avatar.setVisible(true);
     this.markers.setVisible(true);
     this.world.terrain.sampler.setReadyFocus(first.p.x, first.p.z);
@@ -1064,7 +1076,26 @@ export class Game {
           s,
         );
     this.applyPose(cam);
-    this.avatar.update(dtS, pose.p, pose.q, pose.phase);
+    this.avatar.update(dtS, pose.p, pose.q, pose.phase, undefined, s.aglM);
+  }
+
+  /** The avatar's cue from the live flight state and the input the model was stepped with. */
+  private liveCue(run: RunController): AvatarCue {
+    const st = run.state;
+    const input = run.lastInput;
+    const c = this.avatarCue;
+    c.phase = st.phase;
+    c.airspeedMps = st.airspeedMps;
+    c.gLoad = st.gLoad;
+    c.bankDeg = st.bankDeg;
+    c.pitchDeg = st.pitchDeg;
+    c.pitchInput = input.pitch;
+    c.rollInput = input.roll;
+    c.flare = input.flare;
+    c.brakeDeflection = st.brakeDeflection;
+    c.openingProgress = st.openingProgress;
+    c.aglM = st.aglM;
+    return c;
   }
 
   // ----- camera, settings, helpers --------------------------------------------------------

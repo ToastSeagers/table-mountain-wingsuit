@@ -9,7 +9,8 @@ import { FlightModelImpl } from '../src/flight/FlightModelImpl';
 import * as m from '../src/flight/metrics';
 import { makeInput, runScenario, stubScenario, type ScriptFrame } from '../src/flight/scripting';
 import { STUB_BEACH, StubTerrain } from '../src/flight/stub-terrain';
-import { CANOPY, LANDING, WINGSUIT } from '../src/flight/tuning';
+import { bestGlideAlphaDeg, steadyAirspeed, steadyGlide } from '../src/flight/aero';
+import { CANOPY, GROUND_EFFECT, LANDING, WINGSUIT } from '../src/flight/tuning';
 import { campsBay } from './scenarios/camps-bay';
 import { BRAKE_END_S, BRAKE_START_S, DEPLOY_S, TURN_END_S, TURN_START_S } from './scenarios/canopy';
 import { DIVE_END_S, PULL_END_S } from './scenarios/dive';
@@ -70,10 +71,12 @@ function heldPitchSteady(
   p: number,
   fromS = 29,
   toS = 34,
+  exitY = 1050,
 ): { glide: number; airspeed: number; sink: number; mush: number } {
   const sc = stubScenario(`held-${p}`, toS, (t, _st, input) => {
     if (t >= 10) input.pitch = p;
   });
+  sc.exit = { x: 0, y: exitY, z: 0 };
   const frames = runScenario(sc);
   return {
     glide: m.mean(frames, 'glide', fromS, toS),
@@ -158,10 +161,78 @@ export function measureAll(): Row[] {
   push({
     group: W,
     quantity: 'Min sink rate (sustained)',
-    target: '12 m/s (11 to 14)',
+    target: '10 m/s (9.5 to 14, Stage 6 row)',
     measured: `${fmt(minSink.sink, 1)} m/s at ${fmt(minSink.airspeed, 1)} m/s`,
-    ok: within(minSink.sink, 11, 14),
+    ok: within(minSink.sink, 9.5, 14),
     note: `pitch input +${minSink.p}`,
+  });
+
+  // --- Stage 8: the glide ratio as an outcome of state (brief targets and research note).
+  const G = 'glide';
+  const bestA = bestGlideAlphaDeg();
+  push({
+    group: G,
+    quantity: 'Polar best L/D (clean, steady)',
+    target: '3.3 to 3.5 at best-glide speed',
+    measured: `${fmt(steadyGlide(bestA), 2)} at alpha ${fmt(bestA, 1)} deg, ${fmt(steadyAirspeed(bestA), 1)} m/s`,
+    ok: within(steadyGlide(bestA), 3.3, 3.5),
+    note: `trim alpha ${WINGSUIT.trimAlphaDeg} deg gives ${fmt(steadyGlide(WINGSUIT.trimAlphaDeg), 2)} at ${fmt(steadyAirspeed(WINGSUIT.trimAlphaDeg), 1)} m/s`,
+  });
+  const fullDive = heldPitchSteady(-1, 35, 40, 4000);
+  const quarterDive = heldPitchSteady(-0.25, 35, 40, 4000);
+  push({
+    group: G,
+    quantity: 'Full dive steady glide (held full nose down)',
+    target: '1.5 or less, 70 to 80 m/s',
+    measured: `${fmt(fullDive.glide, 2)} at ${fmt(fullDive.airspeed, 1)} m/s`,
+    ok: fullDive.glide <= 1.5 && within(fullDive.airspeed, 70, 80),
+    note: `quarter nose down: ${fmt(quarterDive.glide, 2)} at ${fmt(quarterDive.airspeed, 1)} m/s (faster is lower L/D)`,
+  });
+  push({
+    group: G,
+    quantity: 'Horizontal speed, trim to full dive',
+    target: 'roughly 100 to 180 km/h',
+    measured: `${fmt(trim.groundSpeed * 3.6, 0)} km/h at trim, ${fmt(((fullDive.airspeed * fullDive.glide) / Math.sqrt(1 + fullDive.glide * fullDive.glide)) * 3.6, 0)} km/h horizontal in the full dive`,
+    ok: within(trim.groundSpeed * 3.6, 100, 180),
+  });
+  const bankSc = stubScenario('bank', 30, (t, _st, input) => {
+    if (t >= 14 && t < 14.6) input.roll = 1;
+    if (t >= 14.6) input.roll = 0.3;
+  });
+  bankSc.exit = { x: 0, y: 4000, z: 0 };
+  const bankF = runScenario(bankSc);
+  const levelF = runScenario(stubScenario('level', 30, () => undefined));
+  push({
+    group: G,
+    quantity: 'Held bank (roll 0.3): load factor and sink',
+    target: 'load factor > 1.2, more sink, lower glide than level',
+    measured: `bank ${fmt(Math.abs(m.mean(bankF, 'bank', 25, 30)), 0)} deg, ${fmt(m.mean(bankF, 'gLoad', 25, 30), 2)} g, sink ${fmt(m.mean(bankF, 'sink', 25, 30), 1)} m/s, glide ${fmt(m.mean(bankF, 'glide', 25, 30), 2)}`,
+    ok:
+      m.mean(bankF, 'gLoad', 25, 30) > 1.2 &&
+      m.mean(bankF, 'sink', 25, 30) > m.mean(levelF, 'sink', 25, 30) &&
+      m.mean(bankF, 'glide', 25, 30) < m.mean(levelF, 'glide', 25, 30),
+    note: `level: sink ${fmt(m.mean(levelF, 'sink', 25, 30), 1)} m/s, glide ${fmt(m.mean(levelF, 'glide', 25, 30), 2)}`,
+  });
+  const floatSc = stubScenario('float', 30, (t, _st, input) => {
+    if (t >= 14) input.pitch = 1;
+  });
+  floatSc.exit = { x: 0, y: 4000, z: 0 };
+  const floatF = runScenario(floatSc);
+  const floatPeak = m.peak(floatF, 'glide', 14, 20);
+  const floatSlow = m.trough(floatF, 'airspeed', 20, 30);
+  push({
+    group: G,
+    quantity: 'Full pull-back: float then mush',
+    target: 'glide rises, then airspeed under mush onset with sink back up',
+    measured: `peak glide ${fmt(floatPeak.value, 2)} at ${fmt(floatPeak.t, 1)} s, then ${fmt(floatSlow.value, 1)} m/s at ${fmt(floatSlow.t, 1)} s with sink ${fmt(m.frameAt(floatF, floatSlow.t).sink, 1)} m/s, mush ${fmt(m.frameAt(floatF, floatSlow.t).mush, 2)}`,
+    ok: floatPeak.value > 4 && floatSlow.value < WINGSUIT.mushOnsetMps,
+  });
+  push({
+    group: G,
+    quantity: 'Ground effect',
+    target: 'off by default (research 2.6: 1.0 to 1.3 over 20 m, for a human to judge)',
+    measured: `maxLiftGain ${GROUND_EFFECT.maxLiftGain}, heightM ${GROUND_EFFECT.heightM}`,
+    ok: null,
   });
 
   // --- dive and pull

@@ -42,6 +42,9 @@ export const CAM = {
   canopyUpM: 6.5,
   canopyFovDeg: 66,
   headFovDeg: 88,
+  /** Head cam mount: this far ahead of the pilot's centre (negative is behind) and this far up body-up (Stage 8). */
+  headBackM: -0.35,
+  headUpM: 0.8,
   landingFovDeg: 48,
   landingAheadM: 38,
   landingSideM: 14,
@@ -127,6 +130,7 @@ export class CameraRig {
   private readonly fwd: Vec3 = { x: 0, y: 0, z: -1 };
   private readonly smoothFwd: Vec3 = { x: 0, y: 0, z: -1 };
   private readonly tmp: Vec3 = { x: 0, y: 0, z: 0 };
+  private readonly tmp2: Vec3 = { x: 0, y: 0, z: 0 };
   private landingSpot: Vec3 | null = null;
   private lastMode: CameraMode | null = null;
   private timeS = 0;
@@ -307,10 +311,13 @@ export class CameraRig {
     out.rollDeg = 0;
     switch (mode) {
       case 'head': {
+        // Stage 8: a helmet-top mount just behind and above the helmet, along body up, so the
+        // hands and the wing leading edges sit in the lower corners of the frame.
         const bf = forwardOf(s.orientation, this.tmp);
-        out.position.x = p.x + bf.x * 0.5;
-        out.position.y = p.y + bf.y * 0.5 + 0.3;
-        out.position.z = p.z + bf.z * 0.5;
+        const bu = upOf(s.orientation, this.tmp2);
+        out.position.x = p.x + bf.x * CAM.headBackM + bu.x * CAM.headUpM;
+        out.position.y = p.y + bf.y * CAM.headBackM + bu.y * CAM.headUpM;
+        out.position.z = p.z + bf.z * CAM.headBackM + bu.z * CAM.headUpM;
         out.target.x = p.x + bf.x * 60;
         out.target.y = p.y + bf.y * 60;
         out.target.z = p.z + bf.z * 60;

@@ -1,6 +1,6 @@
 # Flight model spec
 
-Owner: Stage 3. Tuned in Stage 6. Numbers are targets with tolerances; the model is a game model that reads as real, not a CFD simulation.
+Owner: Stage 3. Tuned in Stage 6. Glide made dynamic in Stage 8 (section 4a). Numbers are targets with tolerances; the model is a game model that reads as real, not a CFD simulation.
 
 ## 1. What the player should feel
 
@@ -57,11 +57,22 @@ drag  = 0.5 * rho * v^2 * S * CD(alpha)
 - `rho` = 1.15 (sea level, warm day). Optionally vary with altitude (small effect, fine to ignore).
 - `S` = 1.6 m^2 effective. Tune `S`, `CL(alpha)`, `CD(alpha)` to hit the table. A simple piecewise linear CL with a soft stall past 18 degrees and a CD parabola (`CD0 + k * CL^2`) is enough.
 - Start arc: the suit's effective `S` ramps from 0.3 to 1.0 of full over the first 3 s after exit as the pilot "gets flying", gated also by airspeed. This produces the drop and the catch.
-- Orientation: quaternion. Pitch and roll inputs set target body rates scaled by control authority `clamp(v / v_trim, 0.3, 1.2)^2`. Yaw is coupled to roll (bank produces a turn via the lift vector tilting) plus a small direct nudge.
+- Orientation: quaternion. Roll input sets a target body rate scaled by control authority `clamp(v / v_trim, 0.3, 1.2)^2`; pitch input commands a body attitude (section 4a). Yaw is coupled to roll (bank produces a turn via the lift vector tilting) plus a small direct nudge.
 - Angle of attack derived from body axis versus velocity. Sideslip adds drag.
 - Mush: below mush onset, add a sink term and halve roll authority.
 - Crash: terrain penetration, or AGL under 0.5 m at airspeed over 12 m/s in wingsuit phase. Landing only in canopy phase.
 - Canopy: separate parameter set, same integrator. Opening is a scripted 2.5 s blend of drag coefficient and a one-time heading preservation. Brakes and flare modify CL/CD. Flare is a timed effect so holding it too early uses it up.
+
+## 4a. The glide ratio is an outcome, not a setting (Stage 8)
+
+Stage 3 closed the pitch loop on a commanded flight-path angle, so zero input held glide 3.0 and the stick asked for a glide. Stage 8 replaced that with an attitude command, which is what a pilot actually holds:
+
+- **Pitch input commands a body pitch attitude.** Zero input is the trim attitude, derived in `aero.ts` as trim alpha minus the trim path angle the polar gives (about -14.7 deg). Full nose-up is 12 deg above that; full nose-down is 55 deg below on a 1.3-power curve (half input about -37 deg).
+- **Angle of attack is attitude plus the path angle below the horizon**, limited by alpha protection (20 deg, just past the soft stall). The alpha spring from Stage 3 tracks that target at the spec pitch rate. Nothing commands the glide: lift and drag at the resulting alpha, on the polar, decide the path, the speed and therefore the ratio the HUD shows.
+- **Why it is stable.** Holding an attitude damps the phugoid strongly (as the path rises, alpha falls), so the 20 s oscillation Stage 3 fought never appears. A hands-off speed trim (0.8 deg of attitude per m/s away from the commanded attitude's own steady speed, capped at 10 deg, fading with any stick input) shortens the approach to trim speed after the catch and after a float; it does not move the steady state.
+- **What emerges.** Trim settles at the polar's L/D for the trim alpha (3.0 at 45 m/s). A slight pull reaches best glide, 3.44 at 35 m/s (alpha 7). Pushing forward lowers alpha and the L/D with it: 2.1 at 60 m/s, 1.2 at 72 m/s (half input), 0.4 at 77 m/s (full), where the fold and the flutter wall pin the speed. A held bank tilts the lift so the path steepens until alpha supplies the extra load: roll 0.3 (48 deg of bank) is 1.33 g, 17 m/s of sink and glide 2.4. A full pull floats first (lift above weight: glide rises past 6 as sink drops to 6 m/s), then the suit decays through 35 m/s into mush with the sink coming back up to 11 to 15 m/s at 25 m/s. Holding too flat is the player's own doing, which is feel #2.
+- **Ground effect** (research note 2.6) is a lift multiplier `1 + gain * (1 - agl / 20 m)^2` under 20 m AGL, `GROUND_EFFECT` in tuning, gain 0 (off) until a human judges it in play.
+- `aero.ts` exposes the steady-state views used by the tests and harness: `steadyGlide(alpha)`, `steadyAirspeed(alpha)`, `bestGlideAlphaDeg()`, `steadyAlphaForAttitude(theta)` (a table built at load) and `attitudeCommandDeg(input, airspeed)`.
 
 ## 5. Inputs
 
@@ -85,6 +96,7 @@ Input smoothing: a 120 ms low-pass on keyboard inputs so taps do not jerk. None 
 - Canopy: deploy at trim; after 2.5 s phase is `canopy`, airspeed 9 to 13, height lost 45 to 90 (model: about 50 m at 12.6 m/s, peak 3.7 g; Stage 6 decision: the end-speed row is kept over the old 55 to 90 height and 2.5 g, because a 2.5 g stop leaves about 20 m/s at 2.5 s).
 - Flare: flare at 3.5 m AGL from full flight lands under 1.5 m/s vertical.
 - Determinism: two runs with identical input scripts produce bit-identical state arrays.
+- Polar and dynamic glide (Stage 8, `polar.test.ts`): best-glide alpha above trim with L/D 3.3 to 3.6 and lower either side; steady airspeed falls with alpha; L/D collapses past the stall; held pitch sweep gives 3.3 to 3.5 slower than trim, under 1.5 at full nose-down with faster always lower; a held bank raises load factor and sink and lowers glide; a full pull floats then mushes; release returns to trim speed within a few seconds; ground effect off by default.
 - Camps Bay scenario (harness): exit 1 position, trim with a slight dive early, deploy at 200 m AGL, lands with x between 2,900 and 3,100.
 
 ## 8. Harness
