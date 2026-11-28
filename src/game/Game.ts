@@ -946,8 +946,7 @@ export class Game {
     this.touch.update(st.phase);
 
     // HUD
-    const k = st.aglM < 40 && st.airspeedMps > 35 ? (40 - st.aglM) / 40 : 0;
-    this.prox += (k - this.prox) * Math.min(1, dtS * 6);
+    this.prox += (run.tracker.proximityMeter - this.prox) * Math.min(1, dtS * 6);
     let prompt: string | null = null;
     if (run.ended) prompt = null;
     else if (st.elapsedS < GO_BANNER_S) prompt = 'GO!';

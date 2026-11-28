@@ -72,7 +72,7 @@ export class RunController {
   constructor(private readonly opts: RunControllerOptions) {
     this.exit = opts.exit;
     this.headingDeg = opts.headingDeg;
-    this.tracker = new ScoreTracker(opts.exit.position, opts.zones, opts.triggers);
+    this.tracker = new ScoreTracker(opts.exit.position, opts.zones, opts.triggers, SCORING, opts.terrain);
     const b = opts.terrain.bounds;
     this.bounds = {
       minX: b.minX - OUT_OF_BOUNDS_MARGIN_M,
@@ -215,7 +215,8 @@ export class RunController {
       landingZoneId: breakdown.landingZoneId,
       distanceM: breakdown.distanceM,
       airTimeS: breakdown.airTimeS,
-      proximityScore: breakdown.proximityScore,
+      // RunResult is a frozen shared type with no near-miss field: near misses are proximity events, so they ride in here.
+      proximityScore: breakdown.proximityScore + breakdown.nearMissScore,
       landingScore: breakdown.landingScore,
       styleBonuses: breakdown.bonuses,
       total: breakdown.total,
