@@ -1,8 +1,8 @@
 import { el } from './dom';
 
-/** One line on what earns points (playtest note 20: "how to score" was a tester's first confusion). */
+/** One line on what earns points (playtest note 20: "how to score" was a tester first confusion). Stage 9: proximity now pays for narrowness, and the line says so. */
 export const SCORING_HINT =
-  'POINTS: FLY LOW AND FAST PAST ROCK. LAND IN A GREEN RING FOR THE BONUS.';
+  'POINTS: FLY FAST AND CLOSE TO ROCK, NARROW GAPS PAY MOST. LAND IN A GREEN RING.';
 
 const KEYBOARD_ROWS: [string, string][] = [
   ['W / S', 'DIVE / PULL UP'],

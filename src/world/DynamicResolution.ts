@@ -8,6 +8,12 @@
  * measurement: after a long run of frames on target the scale rises one step, and if that step costs
  * the budget the controller steps back down and waits twice as long before trying again (a back-off that
  * decays). That is what stops it hunting between two levels.
+ *
+ * Going down is a probe too. Fewer pixels only help a frame that is limited by pixels; a display capped at
+ * 30 Hz (iOS Low Power Mode, a hidden tab, a battery saver) or a CPU-bound scene shows the same slow frames
+ * at every scale. If a step down does not improve the smoothed frame time by MIN_GAIN, the step is undone
+ * and further steps down are blocked for FUTILE_BLOCK_S (doubling each time, to MAX_FUTILE_BLOCK_S), so a
+ * phone that cannot be helped is not left at the floor for nothing.
  */
 export interface DynamicResolutionConfig {
   /** Lowest and highest scene scale, as a fraction of the full resolution. */
@@ -35,10 +41,15 @@ export const BACKOFF_WINDOW_S = 10;
 export const MAX_UP_HOLD_S = 64;
 /** ...and a spell this long without a step down restores it: the scene or the phone's temperature has changed. */
 export const BACKOFF_RESET_S = 120;
+/** A step down must cut the smoothed frame time by at least this fraction (5%) to count as having helped. */
+export const MIN_GAIN = 0.05;
+/** After a step down that bought nothing: no more steps down for this long, seconds, doubling to the maximum. */
+export const FUTILE_BLOCK_S = 60;
+export const MAX_FUTILE_BLOCK_S = 480;
 /** Frames longer than this (a hidden tab, a tab switch, a shader compile) are not evidence about the GPU and are ignored, ms. */
 export const MAX_SAMPLE_MS = 250;
 
-const quantize = (v: number): number => Math.round(v / SCALE_STEP) * SCALE_STEP;
+const quantize = (v: number): number => Number((Math.round(v / SCALE_STEP) * SCALE_STEP).toFixed(2));
 
 export class DynamicResolution {
   private cfg: DynamicResolutionConfig;
@@ -52,6 +63,10 @@ export class DynamicResolution {
   private lastUpS = -Infinity;
   private lastDownS = -Infinity;
   private upHoldS = UP_HOLD_S;
+  /** The smoothed frame time when the last step down was made, until the next evaluation says whether it helped. */
+  private probeBeforeMs: number | null = null;
+  private downBlockedUntilS = -Infinity;
+  private futileBlockS = FUTILE_BLOCK_S;
 
   constructor(cfg: DynamicResolutionConfig) {
     this.cfg = { ...cfg };
@@ -112,13 +127,27 @@ export class DynamicResolution {
     if (this.upHoldS > UP_HOLD_S && this.clockS - this.lastDownS > BACKOFF_RESET_S) this.upHoldS = UP_HOLD_S;
     if (this.clockS - this.lastChangeS < MIN_INTERVAL_S) return null;
 
-    if (over && this.overForS >= DOWN_HOLD_S && this.current > this.cfg.minScale + 1e-6) {
+    // The verdict on the last step down: it helped if the frame is no longer over budget, or is clearly faster.
+    if (this.probeBeforeMs !== null && !over) this.probeBeforeMs = null;
+    if (over && this.overForS >= DOWN_HOLD_S && this.current > this.cfg.minScale + 1e-6 && this.clockS >= this.downBlockedUntilS) {
+      if (this.probeBeforeMs !== null) {
+        const helped = this.smoothed < this.probeBeforeMs * (1 - MIN_GAIN);
+        this.probeBeforeMs = null;
+        if (!helped) {
+          // Same slow frames at a lower scale: not pixel-bound. Undo the step and stop trying for a while.
+          this.downBlockedUntilS = this.clockS + this.futileBlockS;
+          this.futileBlockS = Math.min(MAX_FUTILE_BLOCK_S, this.futileBlockS * 2);
+          return this.move(SCALE_STEP);
+        }
+      }
       if (this.clockS - this.lastUpS < BACKOFF_WINDOW_S) this.upHoldS = Math.min(MAX_UP_HOLD_S, this.upHoldS * 2);
       this.lastDownS = this.clockS;
+      this.probeBeforeMs = this.smoothed;
       return this.move(-SCALE_STEP);
     }
     if (under && this.underForS >= this.upHoldS && this.current < this.cfg.maxScale - 1e-6) {
       this.lastUpS = this.clockS;
+      this.probeBeforeMs = null;
       return this.move(SCALE_STEP);
     }
     return null;

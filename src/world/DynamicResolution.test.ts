@@ -66,14 +66,15 @@ describe('DynamicResolution', () => {
 
   it('respects the floor even when nothing is enough', () => {
     const ctl = new DynamicResolution(CFG);
-    const tr = simulate(ctl, 60, () => 80);
+    // Pixel-bound but far too heavy: 80 ms at full scale is still 29 ms at the floor.
+    const tr = simulate(ctl, 60, (s) => 80 * s * s);
     expect(tr.finalScale).toBeCloseTo(CFG.minScale, 5);
     expect(Math.min(...tr.changes.map((c) => c[1]))).toBeGreaterThanOrEqual(CFG.minScale - 1e-6);
   });
 
   it('steps up slowly when there is headroom: one step per UP_HOLD_S at the soonest, never above the ceiling', () => {
     const ctl = new DynamicResolution({ ...CFG });
-    simulate(ctl, 30, () => 80); // push it to the floor
+    simulate(ctl, 30, (s) => 80 * s * s); // push it to the floor
     expect(ctl.scale).toBeCloseTo(0.6, 5);
     const tr = simulate(ctl, 60, (s) => 6 * s * s, 30);
     expect(tr.finalScale).toBeCloseTo(1, 5);
@@ -102,6 +103,27 @@ describe('DynamicResolution', () => {
     expect(lateChanges.length).toBeLessThanOrEqual(4);
   });
 
+  it('leaves a display capped at 30 Hz alone: a step down that buys nothing is undone, and not tried again for a minute', () => {
+    const ctl = new DynamicResolution(CFG);
+    // Every frame is 33.3 ms at any scale: a 30 Hz cap or a CPU-bound scene, not a pixel-bound one.
+    const tr = simulate(ctl, 50, () => 33.3);
+    expect(tr.changes[0][1]).toBeCloseTo(0.9, 5); // it tries one step...
+    expect(tr.changes[1][1]).toBeCloseTo(1, 5); // ...sees no gain and undoes it
+    expect(tr.changes).toHaveLength(2);
+    expect(tr.finalScale).toBe(1);
+    // After the block it tries once more, and the block doubles.
+    const later = simulate(ctl, 200, () => 33.3, 50);
+    expect(later.changes.length).toBeLessThanOrEqual(4);
+    expect(later.finalScale).toBe(1);
+  });
+
+  it('still keeps a step down that helps, so a real pixel-bound phone reaches its level', () => {
+    const ctl = new DynamicResolution(CFG);
+    const tr = simulate(ctl, 30, (s) => 36 * s * s);
+    expect(tr.finalScale).toBeLessThanOrEqual(0.8);
+    expect(tr.finalScale).toBeGreaterThanOrEqual(0.7);
+  });
+
   it('ignores hitches: a 500 ms frame (tab switch, compile) is not evidence', () => {
     const ctl = new DynamicResolution(CFG);
     for (let i = 0; i < 600; i++) {
@@ -127,7 +149,7 @@ describe('DynamicResolution', () => {
 
   it('clamps into new limits when the preset changes', () => {
     const ctl = new DynamicResolution(CFG);
-    simulate(ctl, 20, () => 80);
+    simulate(ctl, 20, (s) => 80 * s * s);
     ctl.configure({ minScale: 0.8, maxScale: 1, targetMs: CFG.targetMs });
     expect(ctl.scale).toBeGreaterThanOrEqual(0.8 - 1e-6);
   });
