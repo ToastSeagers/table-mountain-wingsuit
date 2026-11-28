@@ -1,6 +1,8 @@
 import type { LandingClass, WingsuitFlightState } from '../flight/state';
 import type { LandingZone } from '../types/game';
 import type { Vec3 } from '../types/math';
+import type { TerrainSampler } from '../types/terrain';
+import { createSurroundings, senseSurroundings } from './risk';
 import type { LandingZoneRegistry } from './LandingZoneRegistry';
 import { SCORING, type ScoringTuning } from './scoring-tuning';
 import { insideVolume, type TriggerRegistry, type TriggerVolume } from './TriggerRegistry';
@@ -33,6 +35,9 @@ export interface ScoreBreakdown {
   distanceScore: number;
   airTimeScore: number;
   proximityScore: number;
+  /** Discrete near-miss stamps (a lump sum each), on top of the continuous proximity score. */
+  nearMissScore: number;
+  nearMissCount: number;
   landingScore: number;
   bonuses: StyleBonus[];
   /** Sum of bonus points after the style cap. */
@@ -53,6 +58,16 @@ const cap = (v: number, max: number): number => Math.min(max, Math.max(0, v));
 export class ScoreTracker {
   airTimeS = 0;
   proximityRaw = 0;
+  nearMissRaw = 0;
+  nearMissCount = 0;
+  /** Highest narrowness seen this run, for tests and probes. */
+  peakNarrowness = 0;
+  /** 0..1 for the HUD's proximity bar: closeness, weighted up by how closed in the pilot is. */
+  proximityMeter = 0;
+  private readonly around = createSurroundings();
+  private senseCountdown = 0;
+  private armed = true;
+  private sinceNearMissS = Infinity;
   private readonly bonuses = new Map<string, StyleBonus>();
   private readonly stamps: StyleBonus[] = [];
   private ghostS = 0;
@@ -69,6 +84,8 @@ export class ScoreTracker {
     private readonly zones: LandingZoneRegistry,
     triggers: TriggerRegistry,
     private readonly tuning: ScoringTuning = SCORING,
+    /** Without a terrain the proximity term falls back to AGL alone (open ground) and there are no near misses. */
+    private readonly terrain: TerrainSampler | null = null,
   ) {
     this.apostles = triggers.forBonus('apostles');
     this.gorge = triggers.forBonus('gorge');
@@ -81,10 +98,20 @@ export class ScoreTracker {
     const flying = st.phase === 'freefall' || st.phase === 'wingsuit';
     if (flying) this.airTimeS += dtS;
 
+    this.sense(st);
     const p = t.proximity;
-    if (st.aglM < p.aglBelowM && st.airspeedMps > p.airspeedAboveMps) {
-      this.proximityRaw += (dtS * st.airspeedMps * (p.aglBelowM - st.aglM) * p.gain) / p.aglBelowM;
+    // The closest terrain in any direction we sampled, not just the ground below (a wall 5 m off the
+    // wingtip is as close as a slope 5 m under the belly).
+    const clear = Math.min(st.aglM, this.around.clearanceM);
+    if (clear < p.aglBelowM && st.airspeedMps > p.airspeedAboveMps) {
+      const closeness = (p.aglBelowM - clear) / p.aglBelowM;
+      const risk = p.riskFloor + p.riskSpan * this.around.narrowness;
+      this.proximityRaw += dtS * st.airspeedMps * closeness * p.gain * risk;
+      this.proximityMeter = closeness * Math.min(1, 0.35 + this.around.narrowness);
+    } else {
+      this.proximityMeter = 0;
     }
+    this.nearMiss(dtS, st, flying, clear);
 
     // Ghost line: continuous seconds low and fast.
     const g = t.bonuses.ghost;
@@ -123,6 +150,51 @@ export class ScoreTracker {
     }
   }
 
+  /** Samples the terrain at 30 Hz; between samples the last reading stands. */
+  private sense(st: Readonly<WingsuitFlightState>): void {
+    if (!this.terrain) {
+      this.around.clearanceM = st.aglM;
+      this.around.narrowness = 0;
+      return;
+    }
+    if (this.senseCountdown-- > 0) return;
+    this.senseCountdown = this.tuning.risk.senseEverySteps - 1;
+    senseSurroundings(this.terrain, st.position, st.velocity, st.headingDeg, this.around);
+    if (this.around.narrowness > this.peakNarrowness) this.peakNarrowness = this.around.narrowness;
+  }
+
+  /** Lump sum for a near miss at the current narrowness: a little over open ground, a lot in a gorge or gap. */
+  nearMissPoints(narrowness: number): number {
+    const n = this.tuning.nearMiss;
+    return Math.round(n.basePoints * (n.floor + (1 - n.floor) * narrowness));
+  }
+
+  /**
+   * One pass, one stamp: a pass starts when the clearance falls inside `withinM` at speed, and the next
+   * can start only after the clearance has opened to `rearmM` and the cooldown has run, so skimming a
+   * slope at 5 m for a minute is one stamp, not twenty.
+   */
+  private nearMiss(dtS: number, st: Readonly<WingsuitFlightState>, flying: boolean, clear: number): void {
+    const n = this.tuning.nearMiss;
+    this.sinceNearMissS += dtS;
+    if (!flying || !this.terrain) return;
+    if (clear >= n.rearmM) this.armed = true;
+    if (
+      this.armed &&
+      this.elapsedS > n.graceS &&
+      this.sinceNearMissS >= n.cooldownS &&
+      clear <= n.withinM &&
+      st.airspeedMps >= n.airspeedAboveMps
+    ) {
+      this.armed = false;
+      this.sinceNearMissS = 0;
+      const points = this.nearMissPoints(this.around.narrowness);
+      this.nearMissRaw += points;
+      this.nearMissCount++;
+      this.stamps.push({ id: `near-miss-${this.nearMissCount}`, label: n.label, points });
+    }
+  }
+
   /** Style stamps earned since the last call, for the HUD. */
   drainStamps(): StyleBonus[] {
     return this.stamps.splice(0, this.stamps.length);
@@ -133,7 +205,7 @@ export class ScoreTracker {
     const d = this.tuning;
     const dist = cap(Math.hypot(position.x - this.start.x, position.z - this.start.z) * d.distance.pointsPerM, d.distance.cap);
     const air = cap(this.airTimeS * d.airTime.pointsPerS, d.airTime.cap);
-    const prox = cap(this.proximityRaw, d.proximity.cap);
+    const prox = cap(this.proximityRaw, d.proximity.cap) + cap(this.nearMissRaw, d.nearMiss.cap);
     let b = 0;
     for (const v of this.bonuses.values()) b += v.points;
     return Math.round(dist + air + prox + cap(b, d.styleCap));
@@ -147,6 +219,7 @@ export class ScoreTracker {
     const distanceScore = Math.round(cap(distanceM * t.distance.pointsPerM, t.distance.cap));
     const airTimeScore = Math.round(cap(this.airTimeS * t.airTime.pointsPerS, t.airTime.cap));
     const proximityScore = Math.round(cap(this.proximityRaw, t.proximity.cap));
+    const nearMissScore = Math.round(cap(this.nearMissRaw, t.nearMiss.cap));
 
     let landingScore = 0;
     let surface: LandingSurface = 'none';
@@ -192,10 +265,12 @@ export class ScoreTracker {
       distanceScore,
       airTimeScore,
       proximityScore,
+      nearMissScore,
+      nearMissCount: this.nearMissCount,
       landingScore,
       bonuses,
       bonusScore,
-      total: distanceScore + airTimeScore + proximityScore + landingScore + bonusScore,
+      total: distanceScore + airTimeScore + proximityScore + nearMissScore + landingScore + bonusScore,
       landingZoneId: zone?.id ?? null,
       surface,
     };

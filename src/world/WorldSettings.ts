@@ -62,8 +62,18 @@ export interface WorldSettings {
   textureUploadsPerFrame: number;
   /** Cap on devicePixelRatio. */
   maxPixelRatio: number;
-  /** Fraction of the capped pixel ratio actually rendered. */
+  /** Fraction of the capped pixel ratio actually rendered (the canvas size). */
   renderScale: number;
+  /**
+   * Scene resolution driven by frame time (src/world/DynamicResolution.ts): the scene and bloom chain render
+   * at a fraction of the canvas between `minRenderScale` and `maxRenderScale`, and the composite pass upsamples
+   * to the canvas. Off, the scene renders at `maxRenderScale` (1 on every desktop preset).
+   */
+  dynamicResolution: boolean;
+  minRenderScale: number;
+  maxRenderScale: number;
+  /** Frame time the controller holds, ms (16.7 is 60 fps). */
+  targetFrameMs: number;
   sun: SunParams;
   fog: FogParams;
   sky: SkyParams;
@@ -91,6 +101,10 @@ export const DEFAULT_WORLD_SETTINGS: WorldSettings = {
   textureUploadsPerFrame: DEFAULT_TEXTURE_UPLOADS_PER_FRAME,
   maxPixelRatio: 1,
   renderScale: 1,
+  dynamicResolution: false,
+  minRenderScale: 1,
+  maxRenderScale: 1,
+  targetFrameMs: 1000 / 60,
   sun: { azimuthDeg: 290, elevationDeg: 15, intensity: 1 },
   fog: {
     colour: 0xaeb8c2,

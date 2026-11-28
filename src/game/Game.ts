@@ -27,12 +27,14 @@ import { SettingsScreen } from '../ui/SettingsScreen';
 import { TitleScreen } from '../ui/TitleScreen';
 import { TouchControls } from '../ui/TouchControls';
 import { DevCamera } from '../world/DevCamera';
+import { DynamicResolution, scaleLevels } from '../world/DynamicResolution';
 import { gpuName, PerfOverlay } from '../world/PerfOverlay';
 import { measurementViewpoints } from '../world/viewpoints';
 import { World } from '../world/World';
 import { Autopilot } from './Autopilot';
 import { CameraRig, type CameraMode, type CameraPose, type CameraSubject } from './CameraRig';
 import { CountdownGate } from './CountdownGate';
+import { isQuickRestart, QUICK_COUNTDOWN_S, type FlownLine } from './restartPolicy';
 
 /** Persistence key: the player has been shown the controls card once and pressed on. */
 const CONTROLS_SEEN = { name: 'controls-seen', version: 1 };
@@ -137,6 +139,14 @@ export class Game {
   /** Shader programs for everything the flight draws are compiled (set by the countdown's precompile). */
   private shadersReady = false;
   private warmToken = 0;
+  /** The exit and heading of the last run that reached GO: a restart at the same line may skip the warm-up wait. */
+  private lastFlown: FlownLine | null = null;
+  /** This countdown is a retry that skipped the gates: one GO, then the jump. */
+  private quickCountdown = false;
+  /** Scene resolution from frame time (mobile preset only; a fixed 1 elsewhere). */
+  private readonly dynRes = new DynamicResolution({ minScale: 1, maxScale: 1, targetMs: 1000 / 60 });
+  /** Flight seconds and scale at each change, for the report and `?dev=1` (`__tmw.game.resolutionTrace`). */
+  readonly resolutionTrace: [number, number][] = [];
   private preloads = new Map<string, Promise<void>>();
   private preloaded = new Set<string>();
   private focusedExit: ExitDef | null = null;
@@ -364,6 +374,9 @@ export class Game {
           break;
         case 'flying':
           this.updateFlying(dtS, paused);
+          // A frame the loop capped at 0.1 s was a stall (hidden tab, a long compile): not evidence about the GPU.
+          if (!paused && dtS < 0.099) this.stepResolution(dtS);
+          else this.dynRes.resetTimers();
           if (!paused) {
             this.flightFrames++;
             this.flightSeconds += dtS;
@@ -390,9 +403,18 @@ export class Game {
       this.overlay.draw(
         this.clockS,
         this.world.terrain.stats,
-        `state ${state}${this.machine.paused ? ' (paused)' : ''}  cam ${this.freeCam ? 'FREE (F2)' : 'game (F2)'}  shift+1..${this.exits.exits.length}: fly exit`,
+        `res ${this.dynRes.scale.toFixed(2)}${this.world.settings.dynamicResolution ? ' dyn' : ' fixed'} ${this.dynRes.smoothedMs.toFixed(1)} ms  state ${state}${this.machine.paused ? ' (paused)' : ''}  cam ${this.freeCam ? 'FREE (F2)' : 'game (F2)'}  shift+1..${this.exits.exits.length}: fly exit`,
       );
     }
+  }
+
+  /** One flying frame's wall time into the resolution controller; applies a change to the post stack. */
+  private stepResolution(dtS: number): void {
+    if (!this.world.settings.dynamicResolution) return;
+    const next = this.dynRes.update(dtS * 1000);
+    if (next === null) return;
+    this.post.setSceneScale(next);
+    this.resolutionTrace.push([Math.round(this.flightSeconds * 10) / 10, next]);
   }
 
   /** Runs `seconds` of game time in `stepS` frames without waiting for animation frames. */
@@ -412,6 +434,7 @@ export class Game {
     const sc = this.screens;
     for (const s of Object.values(sc)) s.hide();
     this.ui.classList.remove('black-bg');
+    this.dynRes.resetTimers();
     this.input.captureKeys = to === 'highScoreEntry';
     if (to !== 'flying' && to !== 'countdown') this.input.releaseMouse();
     this.avatar.setVisible(
@@ -445,7 +468,7 @@ export class Game {
         sc.intro.show();
         break;
       case 'countdown':
-        this.beginCountdown();
+        this.beginCountdown(from);
         sc.countdown.show();
         break;
       case 'flying':
@@ -760,9 +783,20 @@ export class Game {
     if (this.introT >= dur) this.dispatch('SKIP_INTRO');
   }
 
-  private beginCountdown(): void {
+  private beginCountdown(from: GameState): void {
     const sel = this.selected;
     if (!sel) return;
+    // Decided before the warm-up below clears the terrain's settled flag.
+    this.quickCountdown = isQuickRestart({
+      from,
+      line: { exitId: sel.exit.id, headingDeg: sel.headingDeg },
+      lastFlown: this.lastFlown,
+      terrainSettled: this.world.terrain.isSettled(),
+      samplerReady: this.world.terrain.sampler.isReady(),
+      preloadDone: this.preloadSettled(),
+      shadersReady: this.shadersReady,
+    });
+    this.screens.countdown.setQuick(this.quickCountdown);
     this.run = new RunController({
       exit: sel.exit,
       headingDeg: sel.headingDeg,
@@ -779,9 +813,12 @@ export class Game {
     this.countdownT = 0;
     this.countdownShown = -1;
     this.gate.reset();
-    // A first-ever flight holds at the cheat sheet until a press (playtest note 22); autopilot runs never wait.
+    if (this.quickCountdown) this.gate.skip();
+    // A first-ever flight holds at the cheat sheet until a press (playtest note 22); autopilot runs never wait,
+    // and a retry never does: you have flown this line.
     this.holdForControls =
       !this.auto &&
+      !this.quickCountdown &&
       !this.persistence.load(
         CONTROLS_SEEN.name,
         CONTROLS_SEEN.version,
@@ -799,7 +836,7 @@ export class Game {
     this.avatar.setVisible(true);
     this.world.terrain.sampler.setReadyFocus(sel.exit.position.x, sel.exit.position.z);
     void this.preloadFor(sel.exit);
-    this.beginWarmup(sel.exit, sel.headingDeg);
+    this.beginWarmup(sel.exit, sel.headingDeg, !this.quickCountdown);
   }
 
   /**
@@ -807,7 +844,7 @@ export class Game {
    * live camera and a pose a few seconds down the line will want, and compile every shader the
    * flight draws (the canopy and its lines are hidden until deploy, so they would otherwise compile mid-air).
    */
-  private beginWarmup(exit: ExitDef, headingDeg: number): void {
+  private beginWarmup(exit: ExitDef, headingDeg: number, compileShaders: boolean): void {
     const terrain = this.world.terrain;
     const h = (headingDeg * Math.PI) / 180;
     const fx = Math.sin(h);
@@ -818,6 +855,11 @@ export class Game {
     terrain.beginWarmup([
       { position: { x, y, z }, target: { x: x + fx * 1500, y: y - 150, z: z + fz * 1500 } },
     ]);
+    // The countdown is a loading screen: build the target sets the dynamic scale can step to, so a change in flight is a pointer swap.
+    const w = this.world.settings;
+    if (w.dynamicResolution) this.post.prepareScales(scaleLevels(w.minRenderScale, w.maxRenderScale));
+    // A retry keeps the programs the last countdown compiled.
+    if (!compileShaders) return;
     const token = ++this.warmToken;
     this.shadersReady = false;
     const done = (): void => {
@@ -847,6 +889,18 @@ export class Game {
     if (stage !== 'go') {
       this.screens.countdown.showWait('LOADING TERRAIN...');
       this.countdownShown = -1;
+    } else if (this.quickCountdown) {
+      // One GO, then the jump: the warm-up keeps streaming underneath for these few frames.
+      if (this.countdownShown !== 0) {
+        this.countdownShown = 0;
+        this.screens.countdown.showNumber(0);
+        this.bus.emit('countdown', 0);
+      }
+      this.countdownT += dtS;
+      if (this.countdownT >= QUICK_COUNTDOWN_S) {
+        this.dispatch('COUNTDOWN_DONE');
+        return;
+      }
     } else if (this.holdForControls) {
       this.screens.countdown.showWait(this.input.touchUi ? 'TAP TO JUMP' : 'READY? PRESS ENTER');
       this.countdownShown = -1;
@@ -883,6 +937,8 @@ export class Game {
   // ----- flying --------------------------------------------------------------------------
 
   private beginFlying(): void {
+    const sel = this.selected;
+    if (sel) this.lastFlown = { exitId: sel.exit.id, headingDeg: sel.headingDeg };
     this.loop.reset();
     this.input.reset();
     this.flightFrames = 0;
@@ -946,8 +1002,7 @@ export class Game {
     this.touch.update(st.phase);
 
     // HUD
-    const k = st.aglM < 40 && st.airspeedMps > 35 ? (40 - st.aglM) / 40 : 0;
-    this.prox += (k - this.prox) * Math.min(1, dtS * 6);
+    this.prox += (run.tracker.proximityMeter - this.prox) * Math.min(1, dtS * 6);
     let prompt: string | null = null;
     if (run.ended) prompt = null;
     else if (st.elapsedS < GO_BANNER_S) prompt = 'GO!';
@@ -1174,6 +1229,14 @@ export class Game {
   private applySettings(s: Readonly<Settings>): void {
     this.world.applySettings(QUALITY[s.quality]);
     this.post.setPreset(s.quality);
+    const w = this.world.settings;
+    this.dynRes.configure({
+      minScale: w.dynamicResolution ? w.minRenderScale : w.maxRenderScale,
+      maxScale: w.maxRenderScale,
+      targetMs: w.targetFrameMs,
+    });
+    this.post.setSceneScale(this.dynRes.scale);
+    this.resolutionTrace.length = 0;
     this.rig.shakeEnabled = s.cameraShake;
     this.input.invertPitch = s.invertPitch;
     this.input.mouseSensitivity = s.mouseSensitivity;

@@ -1,0 +1,1 @@
+landed soft total=6465 prox=0 landing=1863 zone=camps-bay-beach lowS=0.0 bonuses=clean,apostles,beach,late

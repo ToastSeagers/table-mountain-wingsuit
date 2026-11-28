@@ -1578,3 +1578,8 @@ body.touch-ui,
     font-size: 7rem;
   }
 }
+
+/* A retry shows only the GO: no controls card flashing up for 0.6 s. */
+.countdown-screen.quick .controls-card {
+  display: none;
+}

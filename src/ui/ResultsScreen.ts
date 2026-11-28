@@ -64,6 +64,7 @@ export class ResultsScreen extends Screen {
       [`DISTANCE ${fmtScore(b.distanceM)} M`, b.distanceScore, ''],
       [`AIR TIME ${b.airTimeS.toFixed(1)} S`, b.airTimeScore, ''],
       ['PROXIMITY', b.proximityScore, ''],
+      [`NEAR MISSES ${b.nearMissCount}`, b.nearMissScore, ''],
       ['LANDING', b.landingScore, ''],
       ['BONUSES', b.bonusScore, ''],
     ];
@@ -71,7 +72,7 @@ export class ResultsScreen extends Screen {
     const bonusList = el('div', 'bonus-list');
     if (b.bonuses.length === 0) bonusList.textContent = 'NO STYLE BONUSES';
     for (const x of b.bonuses) bonusList.appendChild(el('div', '', `${x.label}  +${x.points}`));
-    this.lines[4].row.after(bonusList);
+    this.lines[5].row.after(bonusList);
     this.lines.push(this.addLine('TOTAL', b.total, 'total'));
 
     const note = this.noteFor(outcome);

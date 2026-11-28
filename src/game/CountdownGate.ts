@@ -23,14 +23,22 @@ export class CountdownGate {
   private waitedS = 0;
   private warmWaitedS = 0;
   private warmDone = false;
+  private skipped = false;
 
   reset(): void {
     this.waitedS = 0;
     this.warmWaitedS = 0;
     this.warmDone = false;
+    this.skipped = false;
+  }
+
+  /** Opens both gates at once: a retry at the same line with everything already settled (restartPolicy.ts). */
+  skip(): void {
+    this.skipped = true;
   }
 
   update(dtS: number, input: GateInputs): GateStage {
+    if (this.skipped) return 'go';
     const terrainOpen = input.terrainReady && (this.waitedS > PRELOAD_WAIT_MAX_S || input.preloadDone);
     if (!terrainOpen) {
       this.waitedS += dtS;

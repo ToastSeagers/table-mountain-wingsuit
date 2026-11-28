@@ -1,0 +1,21 @@
+Platteklip gully floor               AGL  5 m   8.2s  prox=  803 ( 98/s)  nearMiss= 190 (1)  peakNarrow=0.73
+Platteklip east face (one wall)      AGL  5 m   8.2s  prox=  208 ( 25/s)  nearMiss=  90 (1)  peakNarrow=0.30
+Camps Bay lower slope (open)         AGL  5 m  12.9s  prox=  341 ( 27/s)  nearMiss=  92 (1)  peakNarrow=0.13
+Table top plateau (open, flat)       AGL  5 m  13.9s  prox=  322 ( 23/s)  nearMiss=  90 (1)  peakNarrow=0.01
+Platteklip gully floor               AGL 10 m   8.2s  prox=  716 ( 87/s)  nearMiss=   0 (0)  peakNarrow=0.73
+Platteklip east face (one wall)      AGL 10 m   8.2s  prox=  187 ( 23/s)  nearMiss=   0 (0)  peakNarrow=0.30
+Camps Bay lower slope (open)         AGL 10 m  12.9s  prox=  303 ( 24/s)  nearMiss=   0 (0)  peakNarrow=0.13
+Table top plateau (open, flat)       AGL 10 m  13.9s  prox=  286 ( 21/s)  nearMiss=   0 (0)  peakNarrow=0.01
+Platteklip gully floor               AGL 20 m   8.2s  prox=  355 ( 43/s)  nearMiss=   0 (0)  peakNarrow=0.57
+Platteklip east face (one wall)      AGL 20 m   8.2s  prox=  139 ( 17/s)  nearMiss=   0 (0)  peakNarrow=0.30
+Camps Bay lower slope (open)         AGL 20 m  12.9s  prox=  198 ( 15/s)  nearMiss=   0 (0)  peakNarrow=0.02
+Table top plateau (open, flat)       AGL 20 m  13.9s  prox=  214 ( 15/s)  nearMiss=   0 (0)  peakNarrow=0.00
+Platteklip gully floor               AGL 35 m   8.2s  prox=   98 ( 12/s)  nearMiss=   0 (0)  peakNarrow=0.33
+Platteklip east face (one wall)      AGL 35 m   8.2s  prox=   78 ( 10/s)  nearMiss=   0 (0)  peakNarrow=0.30
+Camps Bay lower slope (open)         AGL 35 m  12.9s  prox=   99 (  8/s)  nearMiss=   0 (0)  peakNarrow=0.00
+Table top plateau (open, flat)       AGL 35 m  13.9s  prox=  109 (  8/s)  nearMiss=   0 (0)  peakNarrow=0.00
+Table lazy                   landed    t=238s under50=  0.0s minAGL= 64 prox=    0 nearMiss=   0 (0) peakNarrow=0.00 total= 3817 bonuses=clean,late
+Platteklip lazy              landed    t=204s under50=  0.0s minAGL= 47 prox=    0 nearMiss=   0 (0) peakNarrow=0.00 total= 2833 bonuses=clean
+Table open-slope skim        crashed   t= 52s under50= 15.1s minAGL= 17 prox=  151 nearMiss=   0 (0) peakNarrow=0.00 total= 3533 bonuses=clean,apostles
+Lion's Head open-slope skim  landed    t= 45s under50=  9.0s minAGL= 25 prox=   73 nearMiss=   0 (0) peakNarrow=0.02 total= 2517 bonuses=
+Platteklip gorge line        crashed   t=  7s under50=  0.7s minAGL=  1 prox=   56 nearMiss= 145 (1) peakNarrow=0.30 total=  747 bonuses=clean
