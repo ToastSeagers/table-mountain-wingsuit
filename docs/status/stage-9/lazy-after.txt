@@ -1,0 +1,4 @@
+the-table h265 lazy: landed soft t=238 zone=null total=3817
+platteklip h350 lazy: landed hard t=204 zone=null total=2833
+lions-head h275 lazy: water soft t=136 zone=null total=1997
+lions-head h240 lazy: crashed crash t=130 zone=null total=1183
