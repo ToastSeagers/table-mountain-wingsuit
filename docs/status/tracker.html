@@ -122,7 +122,7 @@
   <header class="top">
     <div>
       <h1>TABLE MOUNTAIN WINGSUIT<br>BUILD TRACKER</h1>
-      <p class="sub">v0.1 shipped with stages 0 to 6. v0.2 alpha is live as <b>v0.2.0-alpha.5</b>: touch controls (7), mobile start-up fix (7b), new pilot, canopy and dynamic glide (8), and the first round of tester fixes. Every stage is merged and its session archived. What is left is in <b>Open items</b>. Plan details live in the repo under <code>PLAN.md</code> and <code>docs/</code>.</p>
+      <p class="sub">v0.1 shipped with stages 0 to 6. v0.2 alpha is live as <b>v0.2.0-alpha.6</b>: touch controls (7), mobile start-up fix (7b), new pilot, canopy and dynamic glide (8), tester fixes, and instant restart, phone resolution and risk scoring (9). Every stage is merged and its session archived. What is left is in <b>Open items</b>. Plan details live in the repo under <code>PLAN.md</code> and <code>docs/</code>.</p>
     </div>
     <div class="meter" aria-live="polite">
       <div class="lbl"><span>STAGES DONE</span><b id="m-stages">0 / 7</b></div>
@@ -145,14 +145,14 @@
 
       <section class="panel">
         <h2>Open items</h2>
-        <p class="sub" style="margin:8px 0 10px">As of 2026-11-28. Source: <code>docs/status/playtest-notes.md</code>, <code>docs/04-roadmap.md</code>, the feedback sheet.</p>
+        <p class="sub" style="margin:8px 0 10px">As of 2026-11-28, after Stage 9. Source: <code>docs/status/playtest-notes.md</code>, <code>docs/04-roadmap.md</code>, the feedback sheet.</p>
         <div class="next">
-          <div class="item blk"><b>Needs you</b>Fly v0.2.0-alpha.5 on your phone with <code>?dev=1</code>: steady fps with the new pilot and canopy, and one tap through the first-flight controls card. This is the last unticked Stage 7 gate item.</div>
+          <div class="item blk"><b>Needs you</b>Fly v0.2.0-alpha.6 on your phone with <code>?dev=1</code> and screenshot 30 s in: the overlay's <code>res</code> line, steady fps with the new pilot, and one tap through the first-flight controls card. Then fly the Platteklip gully low once for the near-miss stamps.</div>
           <div class="item blk"><b>Needs you</b>Get more testers: 1 form response so far (Mac, Safari). Feedback round 1 needs about 5 to 10 before the next stage is chosen from it.</div>
           <div class="item"><b>Needs a person, any time</b>Headphones mix, a real gamepad, mouse pointer lock, Edge, Firefox and iOS Safari, and a low beach pass with ground effect on (<code>GROUND_EFFECT.maxLiftGain</code> 0.3).</div>
-          <div class="item"><b>Housekeeping</b>Delete the merged remote branch: <code>git push origin --delete stage-8-avatar-canopy-glide</code>.</div>
-          <div class="item run"><b>Next build (proposed Stage 9)</b>Instant restart when terrain is settled, dynamic resolution from frame time on phones, risk-weighted proximity with near-miss stamps. Research priority 1.</div>
-          <div class="item"><b>After that</b>Zen mode, per-exit challenges with medals, beginner assist, radial speed blur, a Copy result button, an anonymous play counter.</div>
+          <div class="item"><b>Balance watch</b>Open-slope proximity now pays about 22 points a second at 10 m (the gully 87). If testers say proximity feels dead, raise <code>SCORING.proximity.riskFloor</code> from 0.25 toward 0.6.</div>
+          <div class="item"><b>Housekeeping</b>Delete the merged remote branches: <code>git push origin --delete stage-8-avatar-canopy-glide stage-9-restart-resolution-risk</code>.</div>
+          <div class="item run"><b>Next build candidates</b>Research priority 2: Zen mode, per-exit challenges with medals, beginner assist, a first-flight tutorial overlay, radial speed blur. Small extras: a Copy result button and an anonymous play counter.</div>
         </div>
       </section>
 
@@ -174,7 +174,7 @@
     </aside>
   </div>
 
-  <footer>Order of play: 0 → (1 ∥ 3) → 2 → 4 (∥ 5 audio) → 5 → 6 (v0.1) → 7 → 7b → 8 (v0.2 alpha). Merge only after the gate passes. CI runs the tests before every deploy.</footer>
+  <footer>Order of play: 0 → (1 ∥ 3) → 2 → 4 (∥ 5 audio) → 5 → 6 (v0.1) → 7 → 7b → 8 → 9 (v0.2 alpha). Merge only after the gate passes. CI runs the tests before every deploy.</footer>
 </div>
 
 <script>
@@ -249,6 +249,15 @@
              'Tests extended; test, lint, typecheck, build green',
              'No mobile preset regression',
              'Report with before and after screenshots, tuning table, perf numbers'] },
+    { id: 's9', n: 9, name: 'Instant restart, phone resolution, risk scoring (v0.2)', role: 'Stage 9 Engineer', brief: 'docs/agents/09-restart-resolution-risk.md',
+      model: 'Sonnet 5.5', effort: 'high', mode: 'auto', deps: ['s8'], parallel: [],
+      gate: ['Retry at the same line with settled terrain goes straight to GO; cold start unchanged',
+             'First-flight controls hold still works and never triggers on a restart',
+             'Frame-time resolution controller on the mobile preset, floor and ceiling, no oscillation',
+             'Post stack no longer reallocates on a scale change',
+             'Narrow terrain out-scores open slope at the same height; near-miss stamps and tally line',
+             'Exits unchanged and still landable; tests, lint, typecheck, build green',
+             'Report with restart timings, resolution trace, scoring probes, tuning table'] },
   ];
   const STATUS_LABEL = { pending: 'Pending', in_progress: 'In progress', blocked: 'Blocked', done: 'Done' };
   const TOTAL_GATES = STAGES.reduce((a, s) => a + s.gate.length, 0);
