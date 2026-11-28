@@ -33,6 +33,7 @@ import { World } from '../world/World';
 import { Autopilot } from './Autopilot';
 import { CameraRig, type CameraMode, type CameraPose, type CameraSubject } from './CameraRig';
 import { CountdownGate } from './CountdownGate';
+import { isQuickRestart, QUICK_COUNTDOWN_S, type FlownLine } from './restartPolicy';
 
 /** Persistence key: the player has been shown the controls card once and pressed on. */
 const CONTROLS_SEEN = { name: 'controls-seen', version: 1 };
@@ -137,6 +138,10 @@ export class Game {
   /** Shader programs for everything the flight draws are compiled (set by the countdown's precompile). */
   private shadersReady = false;
   private warmToken = 0;
+  /** The exit and heading of the last run that reached GO: a restart at the same line may skip the warm-up wait. */
+  private lastFlown: FlownLine | null = null;
+  /** This countdown is a retry that skipped the gates: one GO, then the jump. */
+  private quickCountdown = false;
   private preloads = new Map<string, Promise<void>>();
   private preloaded = new Set<string>();
   private focusedExit: ExitDef | null = null;
@@ -445,7 +450,7 @@ export class Game {
         sc.intro.show();
         break;
       case 'countdown':
-        this.beginCountdown();
+        this.beginCountdown(from);
         sc.countdown.show();
         break;
       case 'flying':
@@ -760,9 +765,20 @@ export class Game {
     if (this.introT >= dur) this.dispatch('SKIP_INTRO');
   }
 
-  private beginCountdown(): void {
+  private beginCountdown(from: GameState): void {
     const sel = this.selected;
     if (!sel) return;
+    // Decided before the warm-up below clears the terrain's settled flag.
+    this.quickCountdown = isQuickRestart({
+      from,
+      line: { exitId: sel.exit.id, headingDeg: sel.headingDeg },
+      lastFlown: this.lastFlown,
+      terrainSettled: this.world.terrain.isSettled(),
+      samplerReady: this.world.terrain.sampler.isReady(),
+      preloadDone: this.preloadSettled(),
+      shadersReady: this.shadersReady,
+    });
+    this.screens.countdown.setQuick(this.quickCountdown);
     this.run = new RunController({
       exit: sel.exit,
       headingDeg: sel.headingDeg,
@@ -779,9 +795,12 @@ export class Game {
     this.countdownT = 0;
     this.countdownShown = -1;
     this.gate.reset();
-    // A first-ever flight holds at the cheat sheet until a press (playtest note 22); autopilot runs never wait.
+    if (this.quickCountdown) this.gate.skip();
+    // A first-ever flight holds at the cheat sheet until a press (playtest note 22); autopilot runs never wait,
+    // and a retry never does: you have flown this line.
     this.holdForControls =
       !this.auto &&
+      !this.quickCountdown &&
       !this.persistence.load(
         CONTROLS_SEEN.name,
         CONTROLS_SEEN.version,
@@ -799,7 +818,7 @@ export class Game {
     this.avatar.setVisible(true);
     this.world.terrain.sampler.setReadyFocus(sel.exit.position.x, sel.exit.position.z);
     void this.preloadFor(sel.exit);
-    this.beginWarmup(sel.exit, sel.headingDeg);
+    this.beginWarmup(sel.exit, sel.headingDeg, !this.quickCountdown);
   }
 
   /**
@@ -807,7 +826,7 @@ export class Game {
    * live camera and a pose a few seconds down the line will want, and compile every shader the
    * flight draws (the canopy and its lines are hidden until deploy, so they would otherwise compile mid-air).
    */
-  private beginWarmup(exit: ExitDef, headingDeg: number): void {
+  private beginWarmup(exit: ExitDef, headingDeg: number, compileShaders: boolean): void {
     const terrain = this.world.terrain;
     const h = (headingDeg * Math.PI) / 180;
     const fx = Math.sin(h);
@@ -818,6 +837,8 @@ export class Game {
     terrain.beginWarmup([
       { position: { x, y, z }, target: { x: x + fx * 1500, y: y - 150, z: z + fz * 1500 } },
     ]);
+    // A retry keeps the programs the last countdown compiled.
+    if (!compileShaders) return;
     const token = ++this.warmToken;
     this.shadersReady = false;
     const done = (): void => {
@@ -847,6 +868,18 @@ export class Game {
     if (stage !== 'go') {
       this.screens.countdown.showWait('LOADING TERRAIN...');
       this.countdownShown = -1;
+    } else if (this.quickCountdown) {
+      // One GO, then the jump: the warm-up keeps streaming underneath for these few frames.
+      if (this.countdownShown !== 0) {
+        this.countdownShown = 0;
+        this.screens.countdown.showNumber(0);
+        this.bus.emit('countdown', 0);
+      }
+      this.countdownT += dtS;
+      if (this.countdownT >= QUICK_COUNTDOWN_S) {
+        this.dispatch('COUNTDOWN_DONE');
+        return;
+      }
     } else if (this.holdForControls) {
       this.screens.countdown.showWait(this.input.touchUi ? 'TAP TO JUMP' : 'READY? PRESS ENTER');
       this.countdownShown = -1;
@@ -883,6 +916,8 @@ export class Game {
   // ----- flying --------------------------------------------------------------------------
 
   private beginFlying(): void {
+    const sel = this.selected;
+    if (sel) this.lastFlown = { exitId: sel.exit.id, headingDeg: sel.headingDeg };
     this.loop.reset();
     this.input.reset();
     this.flightFrames = 0;

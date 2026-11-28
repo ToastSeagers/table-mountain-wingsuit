@@ -23,6 +23,11 @@ export class CountdownScreen extends Screen {
     this.num.style.animation = '';
   }
 
+  /** A retry shows just the GO: the controls card stays out of the way. */
+  setQuick(on: boolean): void {
+    this.root.classList.toggle('quick', on);
+  }
+
   showWait(text: string): void {
     this.num.className = 'num wait';
     this.num.textContent = text;
