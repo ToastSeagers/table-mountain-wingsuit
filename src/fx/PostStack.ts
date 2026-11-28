@@ -78,6 +78,16 @@ export const CA_FULL_MPS = 80;
 export const CA_MAX_UV = 0.0035;
 
 const MAX_LEVELS = 5;
+/** Five dynamic levels (1.0 to 0.6) plus the results screen's reduced canvas, with a little slack. */
+export const MAX_TARGET_SETS = 8;
+
+interface TargetSet {
+  w: number;
+  h: number;
+  sceneRT: WebGLRenderTarget;
+  mips: WebGLRenderTarget[];
+  lastUsed: number;
+}
 
 const VERT = /* glsl */ `
 varying vec2 vUv;
@@ -255,10 +265,22 @@ export class PostStack {
   enabled = true;
   private preset: PostPreset = POST_PRESETS.medium;
   private presetName: QualityPreset = 'medium';
+  /**
+   * Render-target sets by size. A scale change (dynamic resolution, the results screen) used to dispose and
+   * reallocate every target, a hitch on the frame that was already too slow. Now each size keeps its set,
+   * least recently used out beyond MAX_TARGET_SETS, and `prepareScales` allocates the levels the dynamic
+   * controller can visit during the countdown, so a change in flight is a pointer swap.
+   */
+  private readonly sets = new Map<string, TargetSet>();
   private sceneRT: WebGLRenderTarget | null = null;
   private mips: WebGLRenderTarget[] = [];
   private w = 0;
   private h = 0;
+  /** Fraction of the drawing buffer the scene (and the bloom chain) renders at; the composite upsamples it to the canvas. */
+  private sceneScale = 1;
+  private useClock = 0;
+  /** Target sets built since construction: the report's "reallocations during play" counter. */
+  allocations = 0;
   private readonly quad: Mesh;
   private readonly cam = new OrthographicCamera(-1, 1, 1, -1, 0, 1);
   private readonly bright: ShaderMaterial;
@@ -300,6 +322,33 @@ export class PostStack {
     this.disposeTargets();
   }
 
+  /** Scene render scale, 0..1 of the drawing buffer. Reuses a cached target set when this size has been used before. */
+  setSceneScale(scale: number): void {
+    this.sceneScale = Math.min(1, Math.max(0.1, scale));
+  }
+
+  get sceneScaleNow(): number {
+    return this.sceneScale;
+  }
+
+  /**
+   * Allocates the target sets for each of `scales` at the current drawing-buffer size and has the GPU create
+   * their textures now (renderer.initRenderTarget), so stepping to any of them in flight costs nothing.
+   */
+  prepareScales(scales: readonly number[]): void {
+    if (!this.enabled) return;
+    this.renderer.getDrawingBufferSize(this.size);
+    for (const s of scales) {
+      const set = this.acquire(this.scaled(this.size.x, s), this.scaled(this.size.y, s));
+      this.renderer.initRenderTarget(set.sceneRT);
+      for (const m of set.mips) this.renderer.initRenderTarget(m);
+    }
+  }
+
+  private scaled(v: number, s: number): number {
+    return Math.max(1, Math.round(v * s));
+  }
+
   private makeComposite(): ShaderMaterial {
     const p = this.preset;
     const u: Record<string, { value: unknown }> = {
@@ -328,15 +377,39 @@ export class PostStack {
     });
   }
 
-  private allocate(w: number, h: number): void {
-    this.disposeTargets();
-    this.w = w;
-    this.h = h;
+  /** The target set for this size, from the cache or newly allocated; the least recently used sets are disposed beyond the cap. */
+  private acquire(w: number, h: number): TargetSet {
+    const key = `${w}x${h}`;
+    let set = this.sets.get(key);
+    if (!set) {
+      const made = this.allocate(w, h);
+      set = { w, h, sceneRT: made.sceneRT, mips: made.mips, lastUsed: 0 };
+      this.sets.set(key, set);
+      this.allocations++;
+      while (this.sets.size > MAX_TARGET_SETS) {
+        let oldestKey = '';
+        let oldest = Infinity;
+        for (const [k, v] of this.sets) {
+          if (v !== set && v.lastUsed < oldest) {
+            oldest = v.lastUsed;
+            oldestKey = k;
+          }
+        }
+        if (!oldestKey) break;
+        this.disposeSet(this.sets.get(oldestKey) as TargetSet);
+        this.sets.delete(oldestKey);
+      }
+    }
+    set.lastUsed = ++this.useClock;
+    return set;
+  }
+
+  private allocate(w: number, h: number): { sceneRT: WebGLRenderTarget; mips: WebGLRenderTarget[] } {
     const depth = new DepthTexture(w, h);
     // Float depth keeps the reversed-Z precision the world relies on (1 m to 80 km).
     depth.type = FloatType;
     depth.format = DepthFormat;
-    this.sceneRT = new WebGLRenderTarget(w, h, {
+    const sceneRT = new WebGLRenderTarget(w, h, {
       type: HalfFloatType,
       format: RGBAFormat,
       samples: this.preset.msaa,
@@ -345,9 +418,10 @@ export class PostStack {
       minFilter: LinearFilter,
       magFilter: LinearFilter,
     });
+    const mips: WebGLRenderTarget[] = [];
     for (let i = 0; i < this.preset.bloomLevels; i++) {
       const s = 2 ** (i + 1);
-      this.mips.push(
+      mips.push(
         new WebGLRenderTarget(Math.max(1, Math.floor(w / s)), Math.max(1, Math.floor(h / s)), {
           type: HalfFloatType,
           format: RGBAFormat,
@@ -357,15 +431,31 @@ export class PostStack {
         }),
       );
     }
+    return { sceneRT, mips };
+  }
+
+  private disposeSet(set: TargetSet): void {
+    set.sceneRT.dispose();
+    set.sceneRT.depthTexture?.dispose();
+    for (const m of set.mips) m.dispose();
   }
 
   private disposeTargets(): void {
-    this.sceneRT?.dispose();
-    this.sceneRT?.depthTexture?.dispose();
+    for (const set of this.sets.values()) this.disposeSet(set);
+    this.sets.clear();
     this.sceneRT = null;
-    for (const m of this.mips) m.dispose();
     this.mips = [];
     this.w = 0;
+  }
+
+  /** Points `sceneRT` and `mips` at the cached set for this scene size. */
+  private select(w: number, h: number): void {
+    if (this.sceneRT && w === this.w && h === this.h) return;
+    const set = this.acquire(w, h);
+    this.sceneRT = set.sceneRT;
+    this.mips = set.mips;
+    this.w = w;
+    this.h = h;
   }
 
   private blit(mat: ShaderMaterial, target: WebGLRenderTarget | null): void {
@@ -390,7 +480,7 @@ export class PostStack {
         jobs.push(r.compileAsync(scene, camera));
       } else {
         r.getDrawingBufferSize(this.size);
-        if (!this.sceneRT || this.size.x !== this.w || this.size.y !== this.h) this.allocate(this.size.x, this.size.y);
+        this.select(this.scaled(this.size.x, this.sceneScale), this.scaled(this.size.y, this.sceneScale));
         const fx = this.activeEffects();
         r.setRenderTarget(this.sceneRT);
         jobs.push(r.compileAsync(scene, camera));
@@ -421,7 +511,7 @@ export class PostStack {
     r.getDrawingBufferSize(this.size);
     const w = this.size.x;
     const h = this.size.y;
-    if (!this.sceneRT || w !== this.w || h !== this.h) this.allocate(w, h);
+    this.select(this.scaled(w, this.sceneScale), this.scaled(h, this.sceneScale));
     const rt = this.sceneRT as WebGLRenderTarget;
     const fx = this.activeEffects();
 

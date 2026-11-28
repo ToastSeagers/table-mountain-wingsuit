@@ -44,3 +44,33 @@ describe('quality presets', () => {
     }
   });
 });
+
+describe('dynamic resolution presets (Stage 9)', () => {
+  it('is on for the mobile preset only, between 0.6 and 1.0 of the canvas', () => {
+    const m = apply('mobile');
+    expect(m.dynamicResolution).toBe(true);
+    expect(m.minRenderScale).toBe(0.6);
+    expect(m.maxRenderScale).toBe(1);
+    for (const name of ['low', 'medium', 'high'] as const) {
+      const s = apply(name);
+      expect(s.dynamicResolution).toBe(false);
+      expect(s.minRenderScale).toBe(1);
+      expect(s.maxRenderScale).toBe(1);
+    }
+    expect(DEFAULT_WORLD_SETTINGS.dynamicResolution).toBe(false);
+  });
+
+  it('switching from mobile back to a desktop preset turns it off again', () => {
+    const s = apply('medium', apply('mobile'));
+    expect(s.dynamicResolution).toBe(false);
+    expect(s.minRenderScale).toBe(1);
+  });
+
+  it('every preset sets every dynamic-resolution knob, so none leaks', () => {
+    for (const p of Object.values(QUALITY)) {
+      expect(p.dynamicResolution).toBeDefined();
+      expect(p.minRenderScale).toBeDefined();
+      expect(p.maxRenderScale).toBeDefined();
+    }
+  });
+});

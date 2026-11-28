@@ -27,6 +27,7 @@ import { SettingsScreen } from '../ui/SettingsScreen';
 import { TitleScreen } from '../ui/TitleScreen';
 import { TouchControls } from '../ui/TouchControls';
 import { DevCamera } from '../world/DevCamera';
+import { DynamicResolution, scaleLevels } from '../world/DynamicResolution';
 import { gpuName, PerfOverlay } from '../world/PerfOverlay';
 import { measurementViewpoints } from '../world/viewpoints';
 import { World } from '../world/World';
@@ -142,6 +143,10 @@ export class Game {
   private lastFlown: FlownLine | null = null;
   /** This countdown is a retry that skipped the gates: one GO, then the jump. */
   private quickCountdown = false;
+  /** Scene resolution from frame time (mobile preset only; a fixed 1 elsewhere). */
+  private readonly dynRes = new DynamicResolution({ minScale: 1, maxScale: 1, targetMs: 1000 / 60 });
+  /** Flight seconds and scale at each change, for the report and `?dev=1` (`__tmw.game.resolutionTrace`). */
+  readonly resolutionTrace: [number, number][] = [];
   private preloads = new Map<string, Promise<void>>();
   private preloaded = new Set<string>();
   private focusedExit: ExitDef | null = null;
@@ -369,6 +374,9 @@ export class Game {
           break;
         case 'flying':
           this.updateFlying(dtS, paused);
+          // A frame the loop capped at 0.1 s was a stall (hidden tab, a long compile): not evidence about the GPU.
+          if (!paused && dtS < 0.099) this.stepResolution(dtS);
+          else this.dynRes.resetTimers();
           if (!paused) {
             this.flightFrames++;
             this.flightSeconds += dtS;
@@ -395,9 +403,18 @@ export class Game {
       this.overlay.draw(
         this.clockS,
         this.world.terrain.stats,
-        `state ${state}${this.machine.paused ? ' (paused)' : ''}  cam ${this.freeCam ? 'FREE (F2)' : 'game (F2)'}  shift+1..${this.exits.exits.length}: fly exit`,
+        `res ${this.dynRes.scale.toFixed(2)}${this.world.settings.dynamicResolution ? ' dyn' : ' fixed'} ${this.dynRes.smoothedMs.toFixed(1)} ms  state ${state}${this.machine.paused ? ' (paused)' : ''}  cam ${this.freeCam ? 'FREE (F2)' : 'game (F2)'}  shift+1..${this.exits.exits.length}: fly exit`,
       );
     }
+  }
+
+  /** One flying frame's wall time into the resolution controller; applies a change to the post stack. */
+  private stepResolution(dtS: number): void {
+    if (!this.world.settings.dynamicResolution) return;
+    const next = this.dynRes.update(dtS * 1000);
+    if (next === null) return;
+    this.post.setSceneScale(next);
+    this.resolutionTrace.push([Math.round(this.flightSeconds * 10) / 10, next]);
   }
 
   /** Runs `seconds` of game time in `stepS` frames without waiting for animation frames. */
@@ -417,6 +434,7 @@ export class Game {
     const sc = this.screens;
     for (const s of Object.values(sc)) s.hide();
     this.ui.classList.remove('black-bg');
+    this.dynRes.resetTimers();
     this.input.captureKeys = to === 'highScoreEntry';
     if (to !== 'flying' && to !== 'countdown') this.input.releaseMouse();
     this.avatar.setVisible(
@@ -837,6 +855,9 @@ export class Game {
     terrain.beginWarmup([
       { position: { x, y, z }, target: { x: x + fx * 1500, y: y - 150, z: z + fz * 1500 } },
     ]);
+    // The countdown is a loading screen: build the target sets the dynamic scale can step to, so a change in flight is a pointer swap.
+    const w = this.world.settings;
+    if (w.dynamicResolution) this.post.prepareScales(scaleLevels(w.minRenderScale, w.maxRenderScale));
     // A retry keeps the programs the last countdown compiled.
     if (!compileShaders) return;
     const token = ++this.warmToken;
@@ -1208,6 +1229,14 @@ export class Game {
   private applySettings(s: Readonly<Settings>): void {
     this.world.applySettings(QUALITY[s.quality]);
     this.post.setPreset(s.quality);
+    const w = this.world.settings;
+    this.dynRes.configure({
+      minScale: w.dynamicResolution ? w.minRenderScale : w.maxRenderScale,
+      maxScale: w.maxRenderScale,
+      targetMs: w.targetFrameMs,
+    });
+    this.post.setSceneScale(this.dynRes.scale);
+    this.resolutionTrace.length = 0;
     this.rig.shakeEnabled = s.cameraShake;
     this.input.invertPitch = s.invertPitch;
     this.input.mouseSensitivity = s.mouseSensitivity;
